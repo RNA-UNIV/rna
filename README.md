@@ -14,7 +14,7 @@ Instalar directamente desde GitHub:
 pip install https://github.com/RNA-UNIV/rna/archive/refs/heads/main.zip
 ```
 
-Luego:
+Luego:[README.md](README.md)
 
 ```python
 import rna
@@ -26,7 +26,8 @@ import rna
 
 La forma más rápida de conocer las capacidades de RNA es ejecutar la demostración principal.
 
-[![Abrir DemoRNA](https://img.shields.io/badge/Jupyter-Demo_Principal-orange?logo=jupyter)](demos/DemoRNA.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/RNA-UNIV/rna/blob/main/demos/DemoRNA.ipynb)
+[![View Notebook](https://img.shields.io/badge/Jupyter-Notebook-orange?logo=jupyter)](demos/DemoRNA.ipynb)
 
 La demo incluye:
 
