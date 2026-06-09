@@ -1,30 +1,95 @@
-<div align="center">
-  <hr>
-  <h1><strong>Repositorio RNA de Github</strong></h1>
-    <a href="https://colab.research.google.com/github/RNA-UNIV/rna/blob/main/DemoRNA.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg"/></a>
-  <hr>
-</div>
+# 🧠 RNA - Redes Neuronales Artificiales
 
-El repositorio para aprendizaje de redes neuronales está disponible de forma  pública en https://github.com/RNA-UNIV/rna
+**RNA** es una biblioteca educativa en Python para el aprendizaje, experimentación y enseñanza de redes neuronales artificiales.
 
-El objetivo del repositorio es el de proveer funciones y clases con implementaciones básicas de algoritmos de redes neuronales, carga de datasets, carga de modelos y carga de ejemplos para pruebas y visualizciones.
+El proyecto busca ofrecer una alternativa simple y accesible para comprender los fundamentos del aprendizaje automático mediante implementaciones transparentes, documentación didáctica y ejemplos prácticos.
 
-Se instala directamente desde el repositorio mediante **pip install git+https://github.com/RNA-UNIV/rna.git**. Esta instalación descarga los archivos python para trabajar y prepara las estructuras de carpetas para realizar descargas de recursos (datasets, modelos, archivos, etc.) bajo demanda. Estos son los módulos dentro del paquete rna donde se encuentran definidos clases y funciones para diferentes tareas:
-* **audio**: procesamiento de audio.
-* **callbacks**: callbacks para tensorflow.
-* **datos**: carga de recursos.
-* **fuentes**: clases con algoritmos de redes neuronales.
-* **imagenes**: procesamiento de imagenes.
+---
 
-# Uso de clase DataLoader para carga de recursos
-Esta clase tiene como objetivo la carga de recursos, principalmente datasets. Crea la carpeta de trabajo **rna_descargas** y subcarpetas para el almacenamiento bajo demanda de datasets, modelos y ejemplos puntuales para pruebas (imagenes, audios, etc.).
+## 🚀 Inicio Rápido
 
-## Carga de Modelos
-La clase **DataLoader** definida en **rna.datos** se encarga del manejo de todo lo asociado a la carga de datasets. Cada dataset se conoce con un nombre único. Algunas de las funciones que realiza son:
-* **list_datasets**: listas los datasets disponibles en el repositorio git.
-* **load_dataframe**: carga un dataset como dataframe.
-* **load_array**: carga un dataset como arreglo numpy.
-* **dataset_info**: ofrece información del dataset (nombre, descripción, autores, url de descarga, descripión breve de atributos, cantidad de ejemplos, etc.).
-* **dataset_directory**: directorio local donde se encuentra el dataset. Útil para realizar algun tipo de procesamiento para archivos individuales como audios e imágenes.
+Instalar directamente desde GitHub:
 
-En el repositorio git cada dataset tiene asociada una carpeta (nombre del dataset) y dentro de la carpeta se encuentra un archivo .csv o .zip con el dataset y un archivo adicional con la información del dataset (info.json). Estos archivos se descargan bajo demanda en la subcarpeta con el nombre del repositorio dentro de la carpeta **modelos** .
+```bash
+pip install https://github.com/RNA-UNIV/rna/archive/refs/heads/main.zip
+```
+
+Luego:
+
+```python
+import rna
+```
+
+---
+
+## 📖 Demo Principal
+
+La forma más rápida de conocer las capacidades de RNA es ejecutar la demostración principal.
+
+[![Abrir DemoRNA](https://img.shields.io/badge/Jupyter-Demo_Principal-orange?logo=jupyter)](demos/DemoRNA.ipynb)
+
+La demo incluye:
+
+* Descarga y gestión de datasets.
+* Exploración de datos.
+* Preparación de conjuntos de entrenamiento y prueba.
+* Entrenamiento de una red neuronal multicapa.
+* Evaluación mediante métricas de clasificación.
+* Visualización de resultados.
+
+---
+
+## ✨ Características
+
+### 📦 Gestión Integrada de Datasets
+
+RNA incorpora herramientas para:
+
+* Descubrir datasets disponibles.
+* Descargar recursos automáticamente.
+* Consultar información descriptiva.
+* Cargar datos como NumPy o Pandas.
+
+### 🧠 Elementos de Redes Neuronales
+
+Implementación orientada al aprendizaje de:
+
+* Clasificación binaria.
+* Regresión lineal.
+* Clasificación multiclase.
+* Entrenamiento supervisado.
+
+
+---
+
+## 📚 Ejemplo
+
+```python
+from rna import DataLoader
+from rna import RNMulticlase
+
+loader = DataLoader()
+
+(X, y) = loader.load_array("iris")
+
+modelo = RNMulticlase()
+modelo.fit(X, y)
+
+predicciones = modelo.predict(X)
+```
+
+---
+
+## 🏗️ Objetivos del Proyecto
+
+RNA busca proporcionar una plataforma sencilla para comprender:
+
+* Representación de datos.
+* Entrenamiento supervisado.
+* Propagación hacia adelante.
+* Retropropagación del error.
+* Evaluación de modelos.
+
+El foco principal está puesto en la claridad conceptual y la experimentación práctica.
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)

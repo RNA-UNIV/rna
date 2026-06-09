@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rna"
+version = "0.1.0"
+description = "Framework educativo para Redes Neuronales Artificiales"
+readme = "README.md"
+requires-python = ">=3.9"
+
+authors = [
+    {name = "César Estrebou & Laura Lanzarini", email = "rma.univ@email.com"}
+]
+
+dependencies = [
+    "requests",
+    "pandas",
+    "pillow",
+    "chardet",
+    "numpy"
+]
+
+[tool.setuptools.packages.find]
+include = ["rna*"]
