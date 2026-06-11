@@ -18,7 +18,8 @@ dependencies = [
     "pandas",
     "pillow",
     "chardet",
-    "numpy"
+    "numpy",
+    "librosa"
 ]
 
 [tool.setuptools.packages.find]

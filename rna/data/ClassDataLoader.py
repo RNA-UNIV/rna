@@ -1,7 +1,5 @@
-import io
 import os
 import json
-import shutil
 import subprocess
 import time
 import zipfile
@@ -9,9 +7,13 @@ import zipfile
 import numpy as np
 import pandas as pd
 import requests
-from chardet.universaldetector import UniversalDetector
+from chardet import UniversalDetector
 from PIL import Image
-from tqdm import tqdm  # usado en load_files
+from tqdm import tqdm
+import librosa
+import tensorflow as tf
+import sys
+import threading
 
 
 class DataLoader:
@@ -26,6 +28,7 @@ class DataLoader:
     # Extensiones soportadas por tipo
     IMAGE_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.bmp', '.gif', '.webp')
     AUDIO_EXTENSIONS = ('.wav', '.mp3', '.ogg', '.flac', '.m4a')
+    META_EXTENSIONS = ('.json')
 
     def __new__(cls, *args, **kwargs):
         if not cls._instance:
@@ -37,6 +40,11 @@ class DataLoader:
     # ------------------------------------------------------------------ #
     #  Infraestructura interna                                             #
     # ------------------------------------------------------------------ #
+    @classmethod
+    def _initialize_class(cls):
+        if cls._resource_path is None:
+            cls._base_path = os.path.join(os.getcwd(), '..', 'rna_downloads')
+            cls._create_directories()
 
     @classmethod
     def _create_directories(cls):
@@ -62,21 +70,21 @@ class DataLoader:
 
     @classmethod
     def _download_file(cls, url, local_path, verbose=True, prefix=''):
+        response = requests.get(url, stream=True)
+        response.raise_for_status()
+        total = int(response.headers.get('content-length', 0))
+
         if verbose:
-            response = requests.get(url, stream=True)
-            total = int(response.headers.get('content-length', 0))
-            with open(local_path, 'wb') as file:
-                downloaded = 0
-                for chunk in response.iter_content(chunk_size=65536):
-                    file.write(chunk)
-                    downloaded += len(chunk)
-                    pct = int(downloaded / total * 100) if total else 0
-                    cls._print_progress(prefix, f'Descargando {pct}%')
+            with tqdm(total=total, unit='B', unit_scale=True, unit_divisor=1024,
+                      desc=prefix, leave=False, file=sys.stdout) as bar:
+                with open(local_path, 'wb') as f:
+                    for chunk in response.iter_content(chunk_size=65536):
+                        f.write(chunk)
+                        bar.update(len(chunk))
         else:
-            response = requests.get(url)
-            response.raise_for_status()
-            with open(local_path, 'wb') as file:
-                file.write(response.content)
+            with open(local_path, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=65536):
+                    f.write(chunk)
 
     @classmethod
     def _find_tool(cls, name):
@@ -97,44 +105,48 @@ class DataLoader:
                 return False
 
     @classmethod
-    def _extract_zip(cls, zip_path, dest_path, prefix=''):
+    def _extract_zip(cls, zip_path, dest_path):
         """
         Extrae zip_path en dest_path usando el descompresor más rápido disponible.
-        Orden de preferencia: unzip (Linux/Mac) → zipfile Python (fallback universal).
-        tar se excluye porque no soporta formato ZIP.
+        Orden de preferencia: unzip (Linux/Mac) -> zipfile Python (fallback universal).
+        Muestra progreso con tqdm actualizado desde un hilo secundario.
         """
-        import threading
-
         os.makedirs(dest_path, exist_ok=True)
-        t0 = time.time()
+        filename = os.path.basename(zip_path)
 
         with zipfile.ZipFile(zip_path, 'r') as zf:
             total = len(zf.namelist())
 
         stop_event = threading.Event()
 
-        def _progress():
-            while not stop_event.is_set():
-                current = sum(len(files) for _, _, files in os.walk(dest_path))
-                pct = int(current / total * 100) if total else 0
-                cls._print_progress(prefix, f'Descomprimiendo {pct}%')
-                stop_event.wait(0.5)
+        with tqdm(total=total, unit=' arch', desc=f'  Descomprimiendo {filename}',
+                  leave=True, file=sys.stdout) as bar:
+            last_count = [0]
 
-        t = threading.Thread(target=_progress, daemon=True)
-        t.start()
+            def _progress():
+                while not stop_event.is_set():
+                    current = sum(len(files) for _, _, files in os.walk(dest_path))
+                    delta = current - last_count[0]
+                    if delta > 0:
+                        bar.update(delta)
+                        last_count[0] = current
+                    stop_event.wait(0.5)
 
-        try:
-            if cls._find_tool('unzip'):
-                subprocess.run(
-                    ['unzip', '-q', zip_path, '-d', dest_path],
-                    check=True
-                )
-            else:
-                with zipfile.ZipFile(zip_path, 'r') as zf:
-                    zf.extractall(dest_path)
-        finally:
-            stop_event.set()
-            t.join()
+            t = threading.Thread(target=_progress, daemon=True)
+            t.start()
+            try:
+                if cls._find_tool('unzip'):
+                    subprocess.run(
+                        ['unzip', '-q', zip_path, '-d', dest_path],
+                        check=True
+                    )
+                else:
+                    with zipfile.ZipFile(zip_path, 'r') as zf:
+                        zf.extractall(dest_path)
+            finally:
+                stop_event.set()
+                t.join()
+                bar.update(total - last_count[0])
 
         os.remove(zip_path)
 
@@ -152,26 +164,38 @@ class DataLoader:
         if not expected_files:
             raise FileNotFoundError(f"No se encontró el dataset \"{name}\" en el repositorio")
 
-        missing_files = [f for f in expected_files
-                         if force or not os.path.exists(os.path.join(local_path, f))]
+        meta_files = [f for f in expected_files if f.endswith(cls.META_EXTENSIONS)]
+        data_files = [f for f in expected_files if not f.endswith(cls.META_EXTENSIONS)]
 
-        for i, filename in enumerate(missing_files, start=1):
+        # metadata: descargar silencioso sin conteo
+        for filename in meta_files:
             local_file = os.path.join(local_path, filename)
+            if force or not os.path.exists(local_file):
+                url = f"{cls._raw_base_url}/{name}/{filename}"
+                cls._download_file(url, local_file, verbose=False)
+
+        # datos: mostrar progreso con conteo
+        for i, filename in enumerate(data_files, start=1):
+            local_file = os.path.join(local_path, filename)
+            prefix = f'[{i}/{len(data_files)}] {filename}'
+
+            if not force and os.path.exists(local_file):
+                print(f'  {prefix}  ✓')
+                continue
+
             url = f"{cls._raw_base_url}/{name}/{filename}"
-            prefix = f'[{i}/{len(missing_files)}] {filename}'
-            verbose = not filename.endswith(('.json', '.md'))
             t0 = time.time()
-            cls._download_file(url, local_file, verbose=verbose, prefix=prefix)
+            cls._download_file(url, local_file, verbose=True, prefix=prefix)
             t_download = time.time() - t0
 
             if filename.endswith('.zip'):
                 data_path = os.path.join(local_path, 'data')
                 t1 = time.time()
-                cls._extract_zip(local_file, data_path, prefix=prefix)
+                cls._extract_zip(local_file, data_path)
                 t_extract = time.time() - t1
-                print(f'{prefix}  ✓ ({t_download:.0f}s descarga | {t_extract:.0f}s descompresión){"":<20}')
-            elif verbose:
-                print(f'{prefix}  ✓ ({t_download:.1f}s){"":<40}')
+                print(f'  {prefix}  ✓ ({t_download:.0f}s descarga | {t_extract:.0f}s descompresión)')
+            else:
+                print(f'  {prefix}  ✓ ({t_download:.1f}s)')
 
         open(sentinel, 'w').close()
         return local_path
@@ -325,7 +349,7 @@ class DataLoader:
         samples, labels = [], []
         errors = 0
         for file_path, label in tqdm(file_list, desc=f"Cargando {name}",
-                                     unit=" archivo", mininterval=2.0):
+                                     unit=" archivo", mininterval=2.0, file=sys.stdout):
             try:
                 samples.append(loader_fn(file_path))
                 labels.append(label)
@@ -339,30 +363,32 @@ class DataLoader:
         return np.array(samples), np.array(labels), class_names
 
     @classmethod
-    def load_files_dataset(cls, name, extensions, loader_fn):
+    def load_files_dataset(
+            cls,
+            name,
+            extensions,
+            loader_fn,
+            sample_shape=None,
+            sample_dtype=tf.float32,
+            shuffle=False,
+            random_state=None
+    ):
         """
         Versión lazy de load_files. Devuelve un tf.data.Dataset sin configurar.
-        El usuario aplica .shuffle(), .batch(), .map() según necesite.
 
         Parámetros
         ----------
-        name       : nombre del dataset en el repositorio
-        extensions : tupla de extensiones, ej: ('.png', '.jpg')
-        loader_fn  : función (file_path: str) -> np.ndarray
+        name          : nombre del dataset en el repositorio
+        extensions    : tupla de extensiones válidas
+        loader_fn     : función (file_path:str) -> np.ndarray
+        shuffle       : mezcla aleatoriamente las muestras
+        random_state  : semilla para reproducibilidad
 
         Retorna
         -------
         ds          : tf.data.Dataset que emite pares (sample, label)
         class_names : list[str]
-
-        Ejemplo
-        -------
-        ds, class_names = dl.load_files_dataset('fingers', DataLoader.IMAGE_EXTENSIONS,
-                                                 mi_loader)
-        ds = ds.shuffle(1000).batch(32).map(augmentation)
-        model.fit(ds)
         """
-        import tensorflow as tf
 
         local_path = cls._require_repo_directory(name)
         root_path = cls._find_data_path(local_path)
@@ -371,17 +397,33 @@ class DataLoader:
         paths = [fp for fp, _ in file_list]
         labels = [lb for _, lb in file_list]
 
+        # Mezcla previa de rutas y etiquetas
+        if shuffle:
+            rng = np.random.default_rng(random_state)
+            indices = rng.permutation(len(paths))
+
+            paths = [paths[i] for i in indices]
+            labels = [labels[i] for i in indices]
+
         path_ds = tf.data.Dataset.from_tensor_slices((paths, labels))
 
         def _load(file_path, label):
             sample = tf.numpy_function(
                 func=lambda p: loader_fn(p.decode('utf-8')),
                 inp=[file_path],
-                Tout=tf.float32
+                Tout=sample_dtype
             )
+
+            if sample_shape is not None:
+                sample.set_shape(sample_shape)
+
             return sample, label
 
-        ds = path_ds.map(_load, num_parallel_calls=tf.data.AUTOTUNE)
+        ds = path_ds.map(
+            _load,
+            num_parallel_calls=tf.data.AUTOTUNE
+        )
+
         return ds, class_names
 
     # ------------------------------------------------------------------ #
@@ -391,11 +433,21 @@ class DataLoader:
     @classmethod
     def _default_image_loader(cls, resize=None):
         """Devuelve una loader_fn para imágenes con resize opcional."""
+
         def loader(file_path):
             img = Image.open(file_path)
+
             if resize:
                 img = img.resize(resize, Image.Resampling.LANCZOS)
-            return np.array(img, dtype=np.float32)
+
+            img = np.array(img, dtype=np.float32)
+
+            # Si es gris: (H,W) -> (H,W,1)
+            if img.ndim == 2:
+                img = img[..., np.newaxis]
+
+            return img
+
         return loader
 
     @classmethod
@@ -410,18 +462,93 @@ class DataLoader:
         class_names : list[str]
         """
         return cls.load_files(name, cls.IMAGE_EXTENSIONS,
-                               cls._default_image_loader(resize))
+                              cls._default_image_loader(resize))
 
     @classmethod
-    def load_images_dataset(cls, name, resize=None):
+    def load_images_dataset(
+            cls,
+            name,
+            resize=None,
+            shuffle=False,
+            random_state=None
+    ):
         """
         Versión lazy de load_images. Devuelve tf.data.Dataset sin configurar.
 
-        Ejemplo
+        Parámetros
+        ----------
+        name          : nombre del dataset
+        resize        : tamaño (ancho, alto)
+        shuffle       : mezcla aleatoriamente las muestras
+        random_state  : semilla para reproducibilidad
+
+        Retorna
         -------
-        ds, class_names = dl.load_images_dataset('fingers', resize=(64, 64))
-        ds = ds.shuffle(1000).batch(32).map(my_augmentation)
-        model.fit(ds)
+        ds          : tf.data.Dataset
+        class_names : list[str]
         """
-        return cls.load_files_dataset(name, cls.IMAGE_EXTENSIONS,
-                                       cls._default_image_loader(resize))
+        shape = None
+
+        if resize is not None:
+            shape = (resize[1], resize[0], 1)
+
+        return cls.load_files_dataset(
+            name,
+            cls.IMAGE_EXTENSIONS,
+            cls._default_image_loader(resize),
+            sample_shape=shape,
+            shuffle=shuffle,
+            random_state=random_state
+        )
+
+    @classmethod
+    def _default_audio_loader(cls,
+                              sample_rate=16000,
+                              duration=None,
+                              mono=True):
+
+        def loader(file_path):
+            audio, sr = librosa.load(
+                file_path,
+                sr=sample_rate,
+                mono=mono
+            )
+
+            if duration is not None:
+                n_samples = int(sample_rate * duration)
+
+                if len(audio) < n_samples:
+                    audio = np.pad(
+                        audio,
+                        (0, n_samples - len(audio))
+                    )
+                else:
+                    audio = audio[:n_samples]
+
+            return audio.astype(np.float32)
+
+        return loader
+
+    @classmethod
+    def load_audio_dataset(cls,
+                           name,
+                           sample_rate=16000,
+                           duration=None):
+
+        sample_shape = None
+
+        if duration is not None:
+            sample_shape = (int(sample_rate * duration),)
+
+        return cls.load_files_dataset(
+            name,
+            cls.AUDIO_EXTENSIONS,
+            cls._default_audio_loader(
+                sample_rate=sample_rate,
+                duration=duration
+            ),
+            sample_shape=sample_shape
+        )
+
+
+DataLoader._initialize_class()
