@@ -1,10 +1,4 @@
 import numpy as np
-import time
-
-from matplotlib import pylab as plt
-from IPython import display
-
-import numpy as np
 from abc import ABC, abstractmethod
 
 
@@ -38,10 +32,11 @@ class NeuronaBase(object):
     accuracy_ : list  # NUEVO: agregado para consistencia
         Accuracy en cada epoch.
     """
-    def __init__(self, alpha=0.01, n_iter=50,
+
+    def __init__(self, alpha=0.01, epochs=50,
                  random_state=None, draw=0, title=['X1', 'X2'], verbose=1):
         self.alpha = alpha
-        self.n_iter = n_iter
+        self.epochs = epochs
         self.random_state = random_state
         self.draw = draw
         self.title = title
@@ -52,13 +47,13 @@ class NeuronaBase(object):
         self.b_ = None
         self.errors_ = []
 
-    def _show_progress(self, epoca, y_true, y_pred):
+    def _show_progress(self, epoch, y_true, y_pred):
         """
         Muestra barra de progreso con el score actual.
 
         Parameters
         ----------
-        epoca : int
+        epoch : int
             Número de época actual (base 0)
         y_true : array-like
             Valores reales
@@ -70,11 +65,11 @@ class NeuronaBase(object):
 
         etiqueta, valor = self._score_metric(y_true, y_pred)
 
-        porcentaje = (epoca + 1) / self.n_iter * 100
+        porcentaje = (epoch + 1) / self.epochs * 100
         barra_len = 30
-        progreso = int(barra_len * (epoca + 1) / self.n_iter)
+        progreso = int(barra_len * (epoch + 1) / self.epochs)
         barra = '█' * progreso + '░' * (barra_len - progreso)
-        print(f'\rÉpoca {epoca + 1}/{self.n_iter} |{barra}| {porcentaje:.1f}% - {etiqueta}: {valor:.6f}',
+        print(f'\rÉpoca {epoch + 1}/{self.epochs} - {porcentaje:.1f}% |{barra}| {etiqueta}: {valor:.6f}',
               end='', flush=True)
 
     def _weights_init(self, n_inputs, n_outputs=1):
@@ -149,4 +144,4 @@ class NeuronaBase(object):
             self.w_ = data['w_']
             self.b_ = data['b_']
 
-            
+

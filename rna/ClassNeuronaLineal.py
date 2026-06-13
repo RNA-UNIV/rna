@@ -1,12 +1,8 @@
-import numpy as np
-import time
-import matplotlib
-from matplotlib import pylab as plt
-from IPython import display
-
 from rna.grafica import *
+from rna.ClassNeuronaBase import NeuronaBase
 
-class NeuronaLineal(object):
+
+class NeuronaLineal(NeuronaBase):
     """
     Parameters
     ------------
@@ -20,7 +16,9 @@ class NeuronaLineal(object):
         1 si dibuja -  0 si no
     title : list con 2 elementos
         titulos de los ejes - sólo 2D
-        
+    verbose : int
+        1 si muestra progreso - 0 si no
+
     Attributes
     -----------
     w_ : 1d-array
@@ -28,13 +26,16 @@ class NeuronaLineal(object):
     errors_ : list
         Number of misclassifications (updates) in each epoch.
     """
-    def __init__(self, alpha=0.01, n_iter=50, cotaE=10E-07, random_state=None, draw=0, title=['X1','X2']):
+
+    def __init__(self, alpha=0.01, epochs=50, cotaE=10E-07, random_state=None, draw=0, title=['X1', 'X2'], verbose=1):
         self.alpha = alpha
-        self.n_iter = n_iter
+        self.epochs = epochs
         self.cotaE = cotaE
-        self.random_state = random_state #-- asignar el valor 1 para fijar la semilla por defecto es aleatorio
+        self.random_state = random_state  # -- asignar el valor 1 para fijar la semilla por defecto es aleatorio
         self.draw = draw
         self.title = title
+        self.verbose = verbose
+        self.accuracy_ = []
 
     def fit(self, X, y):
         """Fit training data.
@@ -52,48 +53,58 @@ class NeuronaLineal(object):
 
         # graficar la recta
         if (self.draw):
-            ycol=y.reshape(-1,1)
-            puntos = np.concatenate((X,ycol), axis=1)
+            ycol = y.reshape(-1, 1)
+            puntos = np.concatenate((X, ycol), axis=1)
             T = np.zeros(X.shape[0])
-            
+
         rgen = np.random.RandomState(self.random_state)
 
         # self.w_ = rgen.normal(loc=0.0, scale=0.01,size=1 + X.shape[1])
 
-        self.w_ = rgen.uniform(-0.5, 0.5, size= X.shape[1]) 
+        self.w_ = rgen.uniform(-0.5, 0.5, size=X.shape[1])
         self.b_ = rgen.uniform(-0.5, 0.5)
         self.errors_ = []
         ph = 0  # manejador de la recta mientras se dibuja
         ErrorAnt = 0
         ErrorAct = 1
-        
+
         i = 0
-        while ((i<self.n_iter) and (np.abs(ErrorAnt- ErrorAct) > self.cotaE)):
+        while ((i < self.epochs) and (np.abs(ErrorAnt - ErrorAct) > self.cotaE)):
             ErrorAnt = ErrorAct
             ErrorAct = 0
             for xi, target in zip(X, y):
-                
                 errorXi = (target - self.predict(xi))
                 update = self.alpha * errorXi
                 self.w_ += update * xi
                 self.b_ += update
-                
-                ErrorAct += errorXi**2
-                
+
+                ErrorAct += errorXi ** 2
+
+            ErrorAct = ErrorAct / len(X)
+
             self.errors_.append(ErrorAct)
-            
+
+            if self.verbose:
+                y_pred = self.predict(X)
+                self._show_progress(i, y, y_pred)
+
             # graficar la recta
             if (self.draw):
-                ph = dibuPtosRecta(puntos,T, np.array([self.w_, -1],dtype=object), self.b_, self.title, ph)
-            
+                ph = dibuPtosRecta(puntos, T, np.array([self.w_, -1], dtype=object), self.b_, self.title, ph)
+
             i = i + 1
-        
+
         return self
 
     def net_input(self, X):
-        """Calculate net input"""
         return np.dot(X, self.w_) + self.b_
 
     def predict(self, X):
-        """Return class label after unit step"""
-        return self.net_input(X) 
+        return self.net_input(X)
+
+    def _score_metric(self, y_true, y_pred):
+        # En NeuronaLineal la pérdida es ECM(MSE)
+        y_true = np.asarray(y_true)
+        y_pred = np.asarray(y_pred)
+        ecm = np.mean((y_true - y_pred) ** 2)
+        return ('ecm', ecm)

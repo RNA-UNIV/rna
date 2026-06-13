@@ -153,7 +153,7 @@ class DataLoader:
     @classmethod
     def _require_repo_directory(cls, name, force=False):
         name = name.lower()
-        local_path = os.path.join(cls._resource_path, name)
+        local_path = os.path.abspath(os.path.join(cls._resource_path, name))
         os.makedirs(local_path, exist_ok=True)
 
         sentinel = os.path.join(local_path, '.complete')

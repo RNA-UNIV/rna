@@ -1,11 +1,6 @@
-import numpy as np
-import time
-
-from matplotlib import pylab as plt
-from IPython import display
-
 from rna.grafica import *
 from rna.ClassNeuronaBase import NeuronaBase
+
 
 class Perceptron(NeuronaBase):
     """Perceptron classifier.
@@ -23,7 +18,7 @@ class Perceptron(NeuronaBase):
         titulos de los ejes - sólo 2D
     verbose : int
         1 si muestra progreso - 0 si no
-        
+
     Attributes
     -----------
     w_ : 1d-array
@@ -31,10 +26,11 @@ class Perceptron(NeuronaBase):
     errors_ : list
         Number of misclassifications (updates) in each epoch.
     """
-    def __init__(self, alpha=0.01, n_iter=50, random_state=None, draw=0, title=['X1','X2'], verbose=1):
+
+    def __init__(self, alpha=0.01, epochs=50, random_state=None, draw=0, title=['X1', 'X2'], verbose=1):
         self.alpha = alpha
-        self.n_iter = n_iter
-        self.random_state = random_state #-- asignar el valor 1 para fijar la semilla por defecto es aleatorio
+        self.epochs = epochs
+        self.random_state = random_state  # -- asignar el valor 1 para fijar la semilla por defecto es aleatorio
         self.draw = draw
         self.title = title
         self.verbose = verbose
@@ -57,14 +53,14 @@ class Perceptron(NeuronaBase):
 
         # self.w_ = rgen.normal(loc=0.0, scale=0.01,size=1 + X.shape[1])
 
-        #self.w_ = rgen.uniform(-0.5, 0.5, size= X.shape[1])
-        #self.b_ = rgen.uniform(-0.5, 0.5)
+        # self.w_ = rgen.uniform(-0.5, 0.5, size= X.shape[1])
+        # self.b_ = rgen.uniform(-0.5, 0.5)
         self._weights_init(X.shape[1])
         self.errors_ = []
         ph = 0  # manejador de la recta mientras se dibuja
-        errors=1
+        errors = 1
         i = 0
-        while ((i<self.n_iter) and (errors > 0.0)):
+        while ((i < self.epochs) and (errors > 0.0)):
             errors = 0
             for xi, target in zip(X, y):
                 update = self.alpha * (target - self.predict(xi))
@@ -72,14 +68,15 @@ class Perceptron(NeuronaBase):
                 self.b_ += update
                 errors += int(update != 0.0)
             self.errors_.append(errors)
-            
+
             # graficar la recta
             if (self.draw):
-                ph = dibuPtosRecta(X,y, self.w_, self.b_, self.title, ph)
+                ph = dibuPtosRecta(X, y, self.w_, self.b_, self.title, ph)
 
             # progreso de entrenamiento
             if self.verbose:
-                self._show_progress(i, X, y)
+                y_pred = self.predict(X)
+                self._show_progress(i, y, y_pred)
 
             i = i + 1
 
@@ -99,12 +96,10 @@ class Perceptron(NeuronaBase):
     def prob_positive_class(self, X):
         """Confidence level for class > 0 """
         netas = self.net_input(X)
-        return 1/(1+np.exp(-netas))
+        return 1 / (1 + np.exp(-netas))
 
     def _score_metric(self, y_true, y_pred):
         """
-        Calcula la métrica principal del modelo - implementar en subclase
-
         Parameters
         ----------
         y_true : array-like
@@ -118,4 +113,3 @@ class Perceptron(NeuronaBase):
         """
         valor = np.mean(y_true == y_pred)
         return ('accuracy', valor)
-

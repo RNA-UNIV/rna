@@ -1,9 +1,3 @@
-import numpy as np
-import time
-
-from matplotlib import pylab as plt
-from IPython import display
-
 from rna.grafica import *
 from rna.ClassNeuronaBase import NeuronaBase
 
@@ -13,7 +7,7 @@ class RNMulticlase(NeuronaBase):
     ------------
     alpha : float
         Learning rate (between 0.0 and 1.0)
-    n_iter : int
+    epochs : int
         Passes over the training dataset.
     cotaE : float
         minimum error threshold
@@ -37,9 +31,9 @@ class RNMulticlase(NeuronaBase):
     accuracy_ : list
         Accuracy en cada epoch.
     """
-    def __init__(self, alpha=0.01, n_iter=50, cotaE=10e-07, FUN='sigmoid', COSTO='ECM', random_state=None, verbose=1):
+    def __init__(self, alpha=0.01, epochs=50, cotaE=10e-07, FUN='sigmoid', COSTO='ECM', random_state=None, verbose=1):
         self.alpha = alpha
-        self.n_iter = n_iter
+        self.epochs = epochs
         self.cotaE = cotaE
         self.FUN = str(FUN)
         self.COSTO = str(COSTO)
@@ -69,7 +63,7 @@ class RNMulticlase(NeuronaBase):
 
         # self.w_ = rgen.normal(loc=0.0, scale=0.01,size=1 + X.shape[1])
         nRow = X.shape[0]  # cantidad de ejemplos
-        nIn = X.shape[1]   # cantidad de atributos de entrada
+        nIn  = X.shape[1]  # cantidad de atributos de entrada
         nOut = y.shape[1]  # cantidad de neuronas de salida (deben ser por lo menos 2)
 
         # self.w_ = np.random.uniform(-0.5, 0.5, [nOut, nIn])
@@ -81,7 +75,7 @@ class RNMulticlase(NeuronaBase):
         ErrorAct = 1
 
         i = 0
-        while ((i<self.n_iter) and (np.abs(ErrorAnt- ErrorAct) > self.cotaE)):
+        while ((i<self.epochs) and (np.abs(ErrorAnt- ErrorAct) > self.cotaE)):
             ErrorAnt = ErrorAct
             ErrorAct = 0
             for e in range(nRow):
@@ -116,6 +110,7 @@ class RNMulticlase(NeuronaBase):
 
         if self.verbose:
             print()  # Salto de línea al finalizar
+
         return self
 
     def _score_metric(self, y_true, y_pred):
@@ -128,22 +123,11 @@ class RNMulticlase(NeuronaBase):
             Valores reales
         y_pred : array-like
             Valores predichos
-
-        Returns
-        -------
-        tuple : (etiqueta, valor)
         """
-        # Asegurar que y_true sea 1D
-        if len(y_true.shape) > 1:
-            y_true = np.argmax(y_true, axis=1)
+        loss = self.fCosto(np.argmax(y_true), y_pred)
+        loss /= y_true.shape[0]
 
-        # Asegurar que y_pred sea 1D
-        if len(y_pred.shape) > 1:
-            y_pred = np.argmax(y_pred, axis=1)
-
-        valor = np.mean(y_true == y_pred)
-
-        return ('accuracy', valor)
+        return (self.COSTO.lower(), loss)
 
     def fCosto(self, y, y_hat):
         EPS = np.finfo(float).eps

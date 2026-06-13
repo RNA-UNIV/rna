@@ -1,12 +1,7 @@
-import numpy as np
-import time
-
-from matplotlib import pylab as plt
-from IPython import display
-
 from rna.grafica import *
+from rna.ClassNeuronaBase import NeuronaBase
 
-class NeuronaGradiente(object):
+class NeuronaGradiente(NeuronaBase):
     """
     Parameters
     ------------
@@ -24,7 +19,9 @@ class NeuronaGradiente(object):
         1 si dibuja -  0 si no
     title : list con 2 elementos
         titulos de los ejes - sólo 2D
-        
+    verbose : int
+        1 si muestra progreso - 0 si no
+
     Attributes
     -----------
     w_ : 1d-array
@@ -32,15 +29,16 @@ class NeuronaGradiente(object):
     errors_ : list
         Number of misclassifications (updates) in each epoch.
     """
-    def __init__(self, alpha=0.01, n_iter=50, cotaE=10e-07, FUN='sigmoid', COSTO='ECM', random_state=None, draw=0, title=['X1','X2']):
+    def __init__(self, alpha=0.01, epochs=50, cotaE=10e-07, FUN='sigmoid', COSTO='ECM', random_state=None, draw=0, title=['X1','X2'], verbose=1):
         self.alpha = alpha
-        self.n_iter = n_iter
+        self.epochs = epochs
         self.cotaE = cotaE
         self.FUN = FUN
         self.COSTO = COSTO
         self.random_state = random_state #-- asignar el valor 1 para fijar la semilla por defecto es aleatorio
         self.draw = draw
         self.title = title
+        self.verbose = verbose
 
     def fit(self, X, y):
         """Fit training data.
@@ -56,43 +54,47 @@ class NeuronaGradiente(object):
         self : object
         """
 
-          
+
         rgen = np.random.RandomState(self.random_state)
 
         # self.w_ = rgen.normal(loc=0.0, scale=0.01,size=1 + X.shape[1])
 
-        self.w_ = rgen.uniform(-0.5, 0.5, size= X.shape[1]) 
+        self.w_ = rgen.uniform(-0.5, 0.5, size= X.shape[1])
         self.b_ = rgen.uniform(-0.5, 0.5)
         self.errors_ = []
         self.accuracy_ = []
-        
+
         ph = 0  # manejador de la recta mientras se dibuja
         ErrorAnt = 0
         ErrorAct = 1
-        
+
         i = 0
-        while ((i<self.n_iter) and (np.absolute(ErrorAnt- ErrorAct) > self.cotaE)):
+        while ((i<self.epochs) and (np.absolute(ErrorAnt- ErrorAct) > self.cotaE)):
             ErrorAnt = ErrorAct
             ErrorAct = 0
-            
+
             for xi, target in zip(X, y):
                 salida = self.predict_nOut(xi)
                 errorXi = (target - salida)
-                
+
                 update = self.alpha * errorXi * self.derivar(salida)
-                
+
                 self.w_ += update * xi
                 self.b_ += update
-                
+
                 ErrorAct += self.fCosto(target, salida)
-                
+
             self.errors_.append(ErrorAct)
             self.accuracy_.append(self.accuracy(X,y))
-            
+
+            # progreso de entrenamiento
+            if self.verbose:
+                y_pred = self.predict(X)
+                self._show_progress(i, y, y_pred)
             # graficar la recta
             if (self.draw):
                 ph = dibuPtosRecta(X,y, self.w_, self.b_, self.title, ph)
-            
+
             i = i + 1
         return self
 
@@ -112,7 +114,7 @@ class NeuronaGradiente(object):
     def net_input(self, X):
         """Calculate net input"""
         return np.dot(X, self.w_) + self.b_
-    
+
     def evaluar(self, x):
         if (self.FUN=='tanh'):
             return (2.0 / (1+np.exp(-2*x)) - 1)
@@ -120,19 +122,19 @@ class NeuronaGradiente(object):
             return (1.0/(1+np.exp(-x)))
         else:
             return(x)
-        
+
     def derivar(self,x):
         if (self.FUN=='tanh'):
             return (1-x**2)
         elif (self.FUN=='sigmoid'):
             return (x*(1-x))
         else:
-            return(1)    
+            return(1)
 
     def predict_nOut(self, X):
         """Return class label after unit step"""
         return self.evaluar(self.net_input(X))
-    
+
     def predict(self, X):
         """Retorna un entero con el índice de la clase más probable """
         y_hat = self.predict_nOut(X)
@@ -142,11 +144,14 @@ class NeuronaGradiente(object):
             return ((y_hat>0.5)*1)
         else:
             return(X)
-            
+
     def accuracy(self, X, y):
         y_hat = self.predict(X)
         OK = np.sum(y_hat==y)
         return (OK/X.shape[0])
-        
-    
-    
+
+    def _score_metric(self, y_true, y_pred):
+        loss = self.fCosto(y_true, y_pred)
+        loss = np.mean(loss.astype(float))
+
+        return (self.COSTO.lower(), loss)
