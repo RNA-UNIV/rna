@@ -79,7 +79,7 @@ class Perceptron(NeuronaBase):
 
             # progreso de entrenamiento
             if self.verbose:
-                self._show_progress(i, X, y)
+                self._show_progress(i, y, self.predict(X))
 
             i = i + 1
 
