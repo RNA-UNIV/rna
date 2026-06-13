@@ -8,7 +8,7 @@ class NeuronaLineal(NeuronaBase):
     ------------
     alpha : float
         Learning rate (between 0.0 and 1.0)
-    n_iter : int
+    epochs : int
         Passes over the training dataset.
     random_state : int
         Random number generator seed for random weight initialization.
