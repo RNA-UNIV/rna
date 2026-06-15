@@ -313,7 +313,12 @@ class DataLoader:
         if separator is None:
             separator = cls._detect_separator(file_path, encoding)
 
-        return pd.read_csv(file_path, encoding=encoding, sep=separator)
+        df =  pd.read_csv(file_path,
+                          na_values=['?', ' ', 'NA', 'N/A', 'null', '-', 'unknown', ''],
+                          encoding=encoding,
+                          sep=separator
+                          )
+        return df
 
     @classmethod
     def load_array(cls, name, encoding=None, separator=None):

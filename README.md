@@ -14,31 +14,13 @@ Instalar directamente desde GitHub:
 pip install https://github.com/RNA-UNIV/rna/archive/refs/heads/main.zip
 ```
 
-Luego:[README.md](README.md)
+Luego:
 
 ```python
 import rna
 ```
 
 ---
-
-## 📖 Demo Principal
-
-La forma más rápida de conocer las capacidades de RNA es ejecutar la demostración principal.
-
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/RNA-UNIV/rna/blob/main/demos/DemoRNA.ipynb)
-[![View Notebook](https://img.shields.io/badge/Jupyter-Notebook-orange?logo=jupyter)](demos/DemoRNA.ipynb)
-
-
-La demo incluye:
-
-* Descarga y gestión de datasets.
-* Exploración de datos.
-* Preparación de conjuntos de entrenamiento y prueba.
-* Entrenamiento de una red neuronal multicapa.
-* Evaluación mediante métricas de clasificación.
-* Visualización de resultados.
-
 
 ## 📖 Demo Principal
 
@@ -58,13 +40,13 @@ La demo incluye:
 
 ## 🧪 Demos adicionales
 
-| Demo | Descripción |
-|------|-------------|
-| [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/RNA-UNIV/rna/blob/main/demos/DemoRNA.ipynb) [![Notebook](https://img.shields.io/badge/Jupyter-Notebook-orange?logo=jupyter)](demos/DemoRNA.ipynb) | **DemoRNA** | Demo principal: red neuronal multicapa para clasificación con visualización completa. |
-| [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/RNA-UNIV/rna/blob/main/demos/DemoImages.ipynb) [![Notebook](https://img.shields.io/badge/Jupyter-Notebook-orange?logo=jupyter)](demos/DemoImages.ipynb) | **DemoImages** | Clasificación de imágenes usando redes neuronales. |
-| [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/RNA-UNIV/rna/blob/main/demos/DemoPerceptron.ipynb) [![Notebook](https://img.shields.io/badge/Jupyter-Notebook-orange?logo=jupyter)](demos/DemoPerceptron.ipynb) | **DemoPerceptron** | Implementación del perceptrón simple para problemas linealmente separables. |
-| [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/RNA-UNIV/rna/blob/main/demos/DemoNeuronaLineal.ipynb) [![Notebook](https://img.shields.io/badge/Jupyter-Notebook-orange?logo=jupyter)](demos/DemoNeuronaLineal.ipynb) | **DemoNeuronaLineal** | Neurona lineal (regresión) y aprendizaje con mínimos cuadrados. |
-| [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/RNA-UNIV/rna/blob/main/demos/DemoNeuronaGradiente.ipynb) [![Notebook](https://img.shields.io/badge/Jupyter-Notebook-orange?logo=jupyter)](demos/DemoNeuronaGradiente.ipynb) | **DemoNeuronaGradiente** | Neurona con entrenamiento por descenso de gradiente. |
+| Abrir |          Demo           | Descripción |
+|:--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:-----------------------:|-------------|
+| [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/RNA-UNIV/rna/blob/main/demos/DemoRNA.ipynb) [![Notebook](https://img.shields.io/badge/Jupyter-Notebook-orange?logo=jupyter)](demos/DemoRNA.ipynb)                           | **Neurona multiclase**  | Demo principal: red neuronal multicapa para clasificación con visualización completa. |
+| [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/RNA-UNIV/rna/blob/main/demos/DemoPerceptron.ipynb) [![Notebook](https://img.shields.io/badge/Jupyter-Notebook-orange?logo=jupyter)](demos/DemoPerceptron.ipynb)             |     **Perceptron**      | Implementación del perceptrón simple para problemas linealmente separables. |
+| [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/RNA-UNIV/rna/blob/main/demos/DemoNeuronaLineal.ipynb) [![Notebook](https://img.shields.io/badge/Jupyter-Notebook-orange?logo=jupyter)](demos/DemoNeuronaLineal.ipynb)       |   **Neurona lineal**    | Neurona lineal (regresión) y aprendizaje con mínimos cuadrados. |
+| [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/RNA-UNIV/rna/blob/main/demos/DemoNeuronaGradiente.ipynb) [![Notebook](https://img.shields.io/badge/Jupyter-Notebook-orange?logo=jupyter)](demos/DemoNeuronaGradiente.ipynb) |  **Neurona Gradiente**  | Neurona con entrenamiento por descenso de gradiente. |
+| [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/RNA-UNIV/rna/blob/main/demos/DemoImages.ipynb) [![Notebook](https://img.shields.io/badge/Jupyter-Notebook-orange?logo=jupyter)](demos/DemoImages.ipynb)                     | **Dataset de imágenes** | Clasificación de imágenes usando redes neuronales. |
 ---
 
 ## ✨ Características
