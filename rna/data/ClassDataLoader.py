@@ -28,7 +28,7 @@ class DataLoader:
     # Extensiones soportadas por tipo
     IMAGE_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.bmp', '.gif', '.webp')
     AUDIO_EXTENSIONS = ('.wav', '.mp3', '.ogg', '.flac', '.m4a')
-    META_EXTENSIONS = ('.json')
+    SKIP_FILES = {'info.json', 'banner.png'}
 
     def __new__(cls, *args, **kwargs):
         if not cls._instance:
@@ -164,17 +164,9 @@ class DataLoader:
         if not expected_files:
             raise FileNotFoundError(f"No se encontró el dataset \"{name}\" en el repositorio")
 
-        meta_files = [f for f in expected_files if f.endswith(cls.META_EXTENSIONS)]
-        data_files = [f for f in expected_files if not f.endswith(cls.META_EXTENSIONS)]
+        skip_files = cls.SKIP_FILES | {f'{name}.md'}
+        data_files = [f for f in expected_files if f not in skip_files]
 
-        # metadata: descargar silencioso sin conteo
-        for filename in meta_files:
-            local_file = os.path.join(local_path, filename)
-            if force or not os.path.exists(local_file):
-                url = f"{cls._raw_base_url}/{name}/{filename}"
-                cls._download_file(url, local_file, verbose=False)
-
-        # datos: mostrar progreso con conteo
         for i, filename in enumerate(data_files, start=1):
             local_file = os.path.join(local_path, filename)
             prefix = f'[{i}/{len(data_files)}] {filename}'
@@ -189,9 +181,13 @@ class DataLoader:
             t_download = time.time() - t0
 
             if filename.endswith('.zip'):
-                data_path = os.path.join(local_path, 'data')
+                # detectar si el zip contiene CSVs (dataset tabular)
+                with zipfile.ZipFile(local_file, 'r') as zf:
+                    has_csv = any(n.endswith('.csv') for n in zf.namelist())
+
+                dest_path = local_path if has_csv else os.path.join(local_path, 'data')
                 t1 = time.time()
-                cls._extract_zip(local_file, data_path)
+                cls._extract_zip(local_file, dest_path)
                 t_extract = time.time() - t1
                 print(f'  {prefix}  ✓ ({t_download:.0f}s descarga | {t_extract:.0f}s descompresión)')
             else:
@@ -201,7 +197,7 @@ class DataLoader:
         return local_path
 
     # ------------------------------------------------------------------ #
-    #  Utilidades de detección                                             #
+    #  Utilidades de detección                                           #
     # ------------------------------------------------------------------ #
 
     @classmethod
