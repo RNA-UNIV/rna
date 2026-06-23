@@ -29,7 +29,6 @@ class DataLoader:
     # Extensiones soportadas por tipo
     IMAGE_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.bmp', '.gif', '.webp')
     AUDIO_EXTENSIONS = ('.wav', '.mp3', '.ogg', '.flac', '.m4a')
-    SKIP_FILES = {'info.json', 'banner.png', 'README.md'}
 
     def __new__(cls, *args, **kwargs):
         if not cls._instance:
@@ -161,45 +160,34 @@ class DataLoader:
         if not force and os.path.exists(sentinel):
             return local_path
 
-        expected_files = cls._list_files(subfolder=name, filetype=['file'])
-        if not expected_files:
-            raise FileNotFoundError(f"No se encontró el dataset \"{name}\" en el repositorio")
-
-        skip_files = cls.SKIP_FILES | {f'{name}.md'}
-        data_files = [f for f in expected_files if f not in skip_files]
-
-        for i, filename in enumerate(data_files, start=1):
+        for filename in [f'{name}.csv', f'{name}.zip']:
             local_file = os.path.join(local_path, filename)
-            prefix = f'[{i}/{len(data_files)}] {filename}'
-
-            if not force and os.path.exists(local_file):
-                print(f'  {prefix}  ✓')
-                continue
-
             url_raw = f"{cls._raw_base_url}/{name}/{filename}"
-            url_release = f"{cls._releases_base_url}/{name}/{filename}"
-            t0 = time.time()
+            url_release = f"{cls._releases_base_url}/{filename}"
+
             try:
-                cls._download_file(url_raw, local_file, verbose=True, prefix=prefix)
+                cls._download_file(url_raw, local_file, verbose=True, prefix=filename)
             except requests.HTTPError:
-                cls._download_file(url_release, local_file, verbose=True, prefix=prefix)
-            t_download = time.time() - t0
+                try:
+                    cls._download_file(url_release, local_file, verbose=True, prefix=filename)
+                except requests.HTTPError:
+                    continue
 
             if filename.endswith('.zip'):
-                # detectar si el zip contiene CSVs (dataset tabular)
                 with zipfile.ZipFile(local_file, 'r') as zf:
                     has_csv = any(n.endswith('.csv') for n in zf.namelist())
-
                 dest_path = local_path if has_csv else os.path.join(local_path, 'data')
                 t1 = time.time()
                 cls._extract_zip(local_file, dest_path)
                 t_extract = time.time() - t1
-                print(f'  {prefix}  ✓ ({t_download:.0f}s descarga | {t_extract:.0f}s descompresión)')
+                print(f'  {filename}  ✓ ({t_extract:.0f}s descompresión)')
             else:
-                print(f'  {prefix}  ✓ ({t_download:.1f}s)')
+                print(f'  {filename}  ✓')
 
-        open(sentinel, 'w').close()
-        return local_path
+            open(sentinel, 'w').close()
+            return local_path
+
+        raise FileNotFoundError(f"No se encontró el dataset \"{name}\" en el repositorio")
 
     # ------------------------------------------------------------------ #
     #  Utilidades de detección                                           #
