@@ -23,6 +23,7 @@ class DataLoader:
     _base_path = None
     _base_url = "https://api.github.com/repos/RNA-UNIV/datasets/contents"
     _raw_base_url = "https://raw.githubusercontent.com/RNA-UNIV/datasets/main"
+    _releases_base_url = "https://github.com/RNA-UNIV/datasets/releases/download/large_datasets"
     _resource_path = None
 
     # Extensiones soportadas por tipo
@@ -175,9 +176,13 @@ class DataLoader:
                 print(f'  {prefix}  ✓')
                 continue
 
-            url = f"{cls._raw_base_url}/{name}/{filename}"
+            url_raw = f"{cls._raw_base_url}/{name}/{filename}"
+            url_release = f"{cls._releases_base_url}/{name}/{filename}"
             t0 = time.time()
-            cls._download_file(url, local_file, verbose=True, prefix=prefix)
+            try:
+                cls._download_file(url_raw, local_file, verbose=True, prefix=prefix)
+            except requests.HTTPError:
+                cls._download_file(url_release, local_file, verbose=True, prefix=prefix)
             t_download = time.time() - t0
 
             if filename.endswith('.zip'):
