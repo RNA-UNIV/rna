@@ -29,7 +29,7 @@ class DataLoader:
     # Extensiones soportadas por tipo
     IMAGE_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.bmp', '.gif', '.webp')
     AUDIO_EXTENSIONS = ('.wav', '.mp3', '.ogg', '.flac', '.m4a')
-    SKIP_FILES = {'info.json', 'banner.png'}
+    SKIP_FILES = {'info.json', 'banner.png', 'README.md'}
 
     def __new__(cls, *args, **kwargs):
         if not cls._instance:
