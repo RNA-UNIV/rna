@@ -310,9 +310,51 @@ class DataLoader:
         return df
 
     @classmethod
-    def load_array(cls, name, encoding=None, separator=None):
+    @classmethod
+    def load_array(cls, name, encoding=None, separator=None, return_type='mixed'):
+        """
+        Carga los datos como array numpy.
+
+        Parameters:
+        -----------
+        name : str
+            Nombre del dataset
+        encoding : str, optional
+            Codificación del archivo
+        separator : str, optional
+            Separador del CSV
+        return_type : str
+            - 'mixed': retorna todo como object (default)
+            - 'numeric': solo columnas numéricas
+            - 'categorical': solo columnas categóricas
+            - 'both': retorna tupla (numeric_array, categorical_array)
+        """
         df = cls.load_dataframe(name, encoding, separator)
-        return df.columns, df.to_numpy()
+
+        if return_type == 'mixed':
+            return df.columns, df.to_numpy()
+
+        elif return_type == 'numeric':
+            numeric_df = df.select_dtypes(include=[np.number])
+            return numeric_df.columns, numeric_df.to_numpy()
+
+        elif return_type == 'categorical':
+            cat_df = df.select_dtypes(include=['object', 'category'])
+            return cat_df.columns, cat_df.to_numpy()
+
+        elif return_type == 'both':
+            numeric_df = df.select_dtypes(include=[np.number])
+            cat_df = df.select_dtypes(include=['object', 'category'])
+            return {
+                'numeric_columns': numeric_df.columns,
+                'numeric_data': numeric_df.to_numpy(),
+                'categorical_columns': cat_df.columns,
+                'categorical_data': cat_df.to_numpy()
+            }
+
+        else:
+            raise ValueError(f"return_type must be 'mixed', 'numeric', 'categorical', or 'both'")
+
 
     # ------------------------------------------------------------------ #
     #  API pública — archivos (imágenes, audio, genérico)                 #
