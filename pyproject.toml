@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "rna"
 version = "0.1.5"
-description = "Framework educativo para Redes Neuronales Artificiales"
+description = "Framework Educativo para Redes Neuronales Artificiales"
 readme = "README.md"
 requires-python = ">=3.9"
 

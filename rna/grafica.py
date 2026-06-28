@@ -56,6 +56,11 @@ def _init_figure(fig_id, entradas, salida, titulos):
 
     fig, ax = plt.subplots(figsize=(7, 6))
 
+    # ── Cambiar fondos a gris claro ────────────────────────
+    #fig.patch.set_facecolor('#f0f0f0')      # fondo de la figura
+    ax.set_facecolor('#f0f0f0')            # fondo del área del gráfico
+    ax.grid(True, color='black', alpha=1)
+
     try:
         fig.canvas.manager.set_window_title(fig_id)
     except Exception:
@@ -109,6 +114,10 @@ def _render(fig_id):
 def dibuPtosRecta(entradas, salida, W, b, titulos=[], fig_id='default', reset=False, titulo=''):
     if entradas.shape[1] != 2:
         return
+
+    if not fig_id:  # None, 0, '', False → genera id nuevo
+        import uuid
+        fig_id = str(uuid.uuid4())
 
     if fig_id in _figures:
         if not plt.fignum_exists(_figures[fig_id]['fig'].number) or reset:

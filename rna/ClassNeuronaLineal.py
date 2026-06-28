@@ -94,6 +94,9 @@ class NeuronaLineal(NeuronaBase):
 
             i = i + 1
 
+        if self.verbose:
+            print()  # Salto de línea al finalizar
+
         return self
 
     def net_input(self, X):
