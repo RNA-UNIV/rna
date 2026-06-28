@@ -53,8 +53,8 @@ _figures = {}
 def _init_figure(fig_id, entradas, salida, titulos):
     if ENV == 'script':
         plt.ion()
-
-    fig, ax = plt.subplots(figsize=(7, 6))
+    # plt.rcParams['figure.figsize'] = [4, 3]
+    fig, ax = plt.subplots(figsize=(4, 3))
 
     # ── Cambiar fondos a gris claro ────────────────────────
     #fig.patch.set_facecolor('#f0f0f0')      # fondo de la figura
@@ -115,7 +115,11 @@ def dibuPtosRecta(entradas, salida, W, b, titulos=[], fig_id='default', reset=Fa
     if entradas.shape[1] != 2:
         return
 
-    if not fig_id:  # None, 0, '', False → genera id nuevo
+    if not fig_id:
+        # cerrar todas las figuras registradas huérfanas
+        for fid, s in list(_figures.items()):
+            plt.close(s['fig'])
+            del _figures[fid]
         import uuid
         fig_id = str(uuid.uuid4())
 
