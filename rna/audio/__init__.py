@@ -1,1 +1,1 @@
-from TransformacionesAudio import *
+from .AudioTransforms import *

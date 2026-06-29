@@ -17,6 +17,30 @@ import threading
 
 
 class DataLoader:
+    """
+    Clase singleton para descarga y carga de datasets del repositorio RNA-UNIV.
+
+    Soporta datasets tabulares (CSV), de imágenes y de audio organizados en
+    subcarpetas por clase. Los archivos se descargan automáticamente la primera
+    vez y se cachean localmente en ``../rna_downloads/data/``.
+
+    Uso básico
+    ----------
+    ::
+
+        # Tabular
+        df, meta = DataLoader.load_dataframe('sonar')
+
+        # Imágenes
+        X, y, clases, meta = DataLoader.load_images('natural_scenes_train', resize=(64, 64))
+
+        # Audio
+        X, y, clases, meta = DataLoader.load_audio('mi_dataset', fixed_duration=1.0)
+
+        # Lazy (tf.data)
+        ds, clases, meta = DataLoader.load_audio_dataset('mi_dataset', fixed_duration=1.0)
+    """
+
     _resource_dir = 'data'
     _repo_files = None
     _instance = None
@@ -40,6 +64,7 @@ class DataLoader:
     # ------------------------------------------------------------------ #
     #  Infraestructura interna                                             #
     # ------------------------------------------------------------------ #
+
     @classmethod
     def _initialize_class(cls):
         if cls._resource_path is None:
@@ -70,6 +95,16 @@ class DataLoader:
 
     @classmethod
     def _download_file(cls, url, local_path, verbose=True, prefix=''):
+        """
+        Descarga un archivo desde ``url`` a ``local_path``.
+
+        Parámetros
+        ----------
+        url        : URL del archivo a descargar
+        local_path : ruta local donde guardar el archivo
+        verbose    : si True muestra barra de progreso tqdm
+        prefix     : etiqueta mostrada en la barra de progreso
+        """
         response = requests.get(url, stream=True)
         response.raise_for_status()
         total = int(response.headers.get('content-length', 0))
@@ -88,8 +123,12 @@ class DataLoader:
 
     @classmethod
     def _find_tool(cls, name):
-        """Busca un ejecutable via subprocess para evitar problemas de PATH en algunos entornos."""
-        # shutil.which puede fallar en Colab si el PATH del proceso Python es reducido
+        """
+        Verifica si un ejecutable está disponible en el sistema.
+
+        Usa ``which`` en Linux/Mac y un fallback directo en Windows.
+        Evita problemas de PATH reducido en entornos como Google Colab.
+        """
         try:
             result = subprocess.run(
                 ['which', name],
@@ -97,7 +136,6 @@ class DataLoader:
             )
             return result.returncode == 0
         except FileNotFoundError:
-            # 'which' no existe (Windows) — intentar ejecutar el comando directamente
             try:
                 subprocess.run([name, '--help'], capture_output=True)
                 return True
@@ -107,9 +145,12 @@ class DataLoader:
     @classmethod
     def _extract_zip(cls, zip_path, dest_path):
         """
-        Extrae zip_path en dest_path usando el descompresor más rápido disponible.
-        Orden de preferencia: unzip (Linux/Mac) -> zipfile Python (fallback universal).
-        Muestra progreso con tqdm actualizado desde un hilo secundario.
+        Extrae ``zip_path`` en ``dest_path`` usando el descompresor más rápido
+        disponible.
+
+        Orden de preferencia: ``unzip`` (Linux/Mac) → ``zipfile`` Python
+        (fallback universal). Muestra progreso con tqdm actualizado desde un
+        hilo secundario. El archivo zip se elimina tras la extracción.
         """
         os.makedirs(dest_path, exist_ok=True)
         filename = os.path.basename(zip_path)
@@ -152,6 +193,26 @@ class DataLoader:
 
     @classmethod
     def _require_repo_directory(cls, name, force=False):
+        """
+        Garantiza que el dataset ``name`` esté disponible localmente.
+
+        Intenta descargar primero desde el repositorio raw y luego desde
+        GitHub Releases para archivos grandes. Usa un archivo centinela
+        ``.complete`` para evitar descargas repetidas.
+
+        Parámetros
+        ----------
+        name  : nombre del dataset (se normaliza a minúsculas)
+        force : si True fuerza la descarga aunque el dataset ya exista
+
+        Retorna
+        -------
+        local_path : ruta absoluta al directorio del dataset
+
+        Raises
+        ------
+        FileNotFoundError : si el dataset no se encuentra en el repositorio
+        """
         name = name.lower()
         local_path = os.path.abspath(os.path.join(cls._resource_path, name))
         os.makedirs(local_path, exist_ok=True)
@@ -190,11 +251,12 @@ class DataLoader:
         raise FileNotFoundError(f"No se encontró el dataset \"{name}\" en el repositorio")
 
     # ------------------------------------------------------------------ #
-    #  Utilidades de detección                                           #
+    #  Utilidades de detección                                             #
     # ------------------------------------------------------------------ #
 
     @classmethod
     def _detect_encoding(cls, file_path):
+        """Detecta la codificación de un archivo de texto usando chardet."""
         detector = UniversalDetector()
         with open(file_path, 'rb') as f:
             for line in f:
@@ -206,6 +268,11 @@ class DataLoader:
 
     @classmethod
     def _detect_separator(cls, file_path, encoding):
+        """
+        Detecta el separador de un CSV inspeccionando la primera línea.
+
+        Evalúa ``,``, ``;`` y ``\\t`` y devuelve el que aparece más veces.
+        """
         with open(file_path, 'r', encoding=encoding) as f:
             first_line = f.readline()
             separators = [',', ';', '\t']
@@ -213,17 +280,37 @@ class DataLoader:
 
     @classmethod
     def _find_data_path(cls, local_path):
-        """Devuelve la carpeta raíz donde están las subcarpetas de clases."""
+        """
+        Devuelve la carpeta raíz donde están las subcarpetas de clases.
+
+        Si existe una subcarpeta ``data/`` dentro de ``local_path``, la
+        devuelve; de lo contrario devuelve ``local_path`` directamente.
+        """
         data_path = os.path.join(local_path, 'data')
         return data_path if os.path.exists(data_path) else local_path
 
     @classmethod
     def _scan_classes(cls, root_path, extensions):
         """
-        Escanea root_path buscando subcarpetas como clases.
-        Devuelve:
-            class_names : list[str]  — nombres de clase ordenados alfabéticamente
-            file_list   : list[tuple(path, label_index)]
+        Escanea ``root_path`` buscando subcarpetas como clases.
+
+        Cada subcarpeta directa de ``root_path`` se trata como una clase.
+        Dentro de cada una se listan los archivos cuya extensión coincida
+        con ``extensions``.
+
+        Parámetros
+        ----------
+        root_path  : directorio raíz con subcarpetas de clases
+        extensions : tupla de extensiones válidas, ej: ``('.wav', '.mp3')``
+
+        Retorna
+        -------
+        class_names : list[str]  — nombres de clase ordenados alfabéticamente
+        file_list   : list[tuple(str, int)]  — pares (ruta_archivo, índice_clase)
+
+        Raises
+        ------
+        FileNotFoundError : si no se encuentran subcarpetas en ``root_path``
         """
         subdirs = sorted([
             d for d in os.listdir(root_path)
@@ -249,16 +336,52 @@ class DataLoader:
 
     @classmethod
     def list_datasets(cls):
+        """
+        Lista los datasets disponibles en el repositorio RNA-UNIV.
+
+        El resultado se cachea en memoria tras la primera consulta.
+
+        Retorna
+        -------
+        list[str] — nombres de los datasets disponibles
+        """
         if cls._repo_files is None:
             cls._repo_files = cls._list_files(filetype=['dir'])
         return cls._repo_files
 
     @classmethod
     def dataset_path(cls, name):
+        """
+        Devuelve la ruta local al dataset, descargándolo si es necesario.
+
+        Parámetros
+        ----------
+        name : nombre del dataset
+
+        Retorna
+        -------
+        str — ruta absoluta al directorio local del dataset
+        """
         return cls._require_repo_directory(name)
 
     @classmethod
     def dataset_info(cls, name, force=False):
+        """
+        Descarga y retorna el archivo ``info.json`` del dataset.
+
+        Parámetros
+        ----------
+        name  : nombre del dataset
+        force : si True fuerza la descarga aunque el archivo ya exista
+
+        Retorna
+        -------
+        dict — contenido del ``info.json``
+
+        Raises
+        ------
+        FileNotFoundError : si no existe ``info.json`` para el dataset
+        """
         name = name.lower()
         local_path = os.path.join(cls._resource_path, name)
         os.makedirs(local_path, exist_ok=True)
@@ -278,6 +401,17 @@ class DataLoader:
 
     @classmethod
     def dataset_info_display(cls, name, force=False):
+        """
+        Muestra el ``info.json`` del dataset de forma legible.
+
+        En entornos Jupyter/Colab usa ``IPython.display.JSON`` para
+        renderizado interactivo; en otros entornos imprime JSON indentado.
+
+        Parámetros
+        ----------
+        name  : nombre del dataset
+        force : si True fuerza la descarga del ``info.json``
+        """
         info_data = cls.dataset_info(name, force)
         try:
             from IPython import get_ipython
@@ -290,7 +424,27 @@ class DataLoader:
             print(json.dumps(info_data, indent=2, ensure_ascii=False))
 
     @classmethod
-    def load_dataframe(cls, name, encoding=None, separator=None):
+    def load_dataframe(cls, name, encoding=None, separator=None, return_metadata=False):
+        """
+        Carga un dataset tabular como ``pd.DataFrame``.
+
+        La codificación y el separador se detectan automáticamente si no se
+        especifican. Los valores típicos de missing (``'?'``, ``'NA'``,
+        ``'null'``, etc.) se reemplazan por ``NaN``.
+
+        Parámetros
+        ----------
+        name            : nombre del dataset en el repositorio
+        encoding        : codificación del CSV (ej: ``'utf-8'``); se autodetecta si es None
+        separator       : separador del CSV (``','``, ``';'``, ``'\\t'``); se autodetecta si es None
+        return_metadata : si True retorna también un dict con ``'encoding'`` y
+                          ``'separator'`` efectivamente usados (default: False)
+
+        Retorna
+        -------
+        df                    : pd.DataFrame
+        metadata (opcional)   : dict con claves ``'encoding'`` y ``'separator'``
+        """
         local_path = cls._require_repo_directory(name)
         csv_files = [f for f in os.listdir(local_path) if f.endswith('.csv')]
         if not csv_files:
@@ -302,59 +456,89 @@ class DataLoader:
         if separator is None:
             separator = cls._detect_separator(file_path, encoding)
 
-        df =  pd.read_csv(file_path,
-                          na_values=['?', ' ', 'NA', 'N/A', 'null', '-', 'unknown', ''],
-                          encoding=encoding,
-                          sep=separator
-                          )
+        df = pd.read_csv(file_path,
+                         na_values=['?', ' ', 'NA', 'N/A', 'null', '-', 'unknown', ''],
+                         encoding=encoding,
+                         sep=separator)
+
+        if return_metadata:
+            return df, {'encoding': encoding, 'separator': separator}
         return df
 
     @classmethod
-    @classmethod
-    def load_array(cls, name, encoding=None, separator=None, return_type='mixed'):
+    def load_array(cls, name, encoding=None, separator=None, return_type='mixed',
+                   return_metadata=False):
         """
-        Carga los datos como array numpy.
+        Carga un dataset tabular como array numpy.
 
-        Parameters:
-        -----------
-        name : str
-            Nombre del dataset
-        encoding : str, optional
-            Codificación del archivo
-        separator : str, optional
-            Separador del CSV
-        return_type : str
-            - 'mixed': retorna todo como object (default)
-            - 'numeric': solo columnas numéricas
-            - 'categorical': solo columnas categóricas
-            - 'both': retorna tupla (numeric_array, categorical_array)
+        Parámetros
+        ----------
+        name            : nombre del dataset
+        encoding        : codificación del CSV; se autodetecta si es None
+        separator       : separador del CSV; se autodetecta si es None
+        return_type     : controla qué columnas se incluyen:
+
+                          - ``'mixed'``       — todo como ``object`` (default)
+                          - ``'numeric'``     — solo columnas numéricas
+                          - ``'categorical'`` — solo columnas categóricas
+                          - ``'both'``        — dict con arrays numérico y categórico
+
+        return_metadata : si True agrega un dict con ``'encoding'`` y
+                          ``'separator'`` al final del retorno (default: False)
+
+        Retorna
+        -------
+        Si ``return_type`` es ``'mixed'``, ``'numeric'`` o ``'categorical'``:
+            columns             : pd.Index — nombres de columnas
+            data                : np.ndarray
+            metadata (opcional) : dict con claves ``'encoding'`` y ``'separator'``
+
+        Si ``return_type`` es ``'both'``:
+            result              : dict con claves ``'numeric_columns'``,
+                                  ``'numeric_data'``, ``'categorical_columns'``,
+                                  ``'categorical_data'``
+            metadata (opcional) : dict con claves ``'encoding'`` y ``'separator'``
+
+        Raises
+        ------
+        ValueError : si ``return_type`` no es uno de los valores válidos
         """
-        df = cls.load_dataframe(name, encoding, separator)
+        df, metadata = cls.load_dataframe(name, encoding, separator, return_metadata=True)
 
         if return_type == 'mixed':
-            return df.columns, df.to_numpy()
+            result = (df.columns, df.to_numpy())
 
         elif return_type == 'numeric':
             numeric_df = df.select_dtypes(include=[np.number])
-            return numeric_df.columns, numeric_df.to_numpy()
+            result = (numeric_df.columns, numeric_df.to_numpy())
 
         elif return_type == 'categorical':
             cat_df = df.select_dtypes(include=['object', 'category'])
-            return cat_df.columns, cat_df.to_numpy()
+            result = (cat_df.columns, cat_df.to_numpy())
 
         elif return_type == 'both':
             numeric_df = df.select_dtypes(include=[np.number])
             cat_df = df.select_dtypes(include=['object', 'category'])
-            return {
+            both_result = {
                 'numeric_columns': numeric_df.columns,
                 'numeric_data': numeric_df.to_numpy(),
                 'categorical_columns': cat_df.columns,
                 'categorical_data': cat_df.to_numpy()
             }
+            if return_metadata:
+                return both_result, metadata
+            return both_result
 
         else:
-            raise ValueError(f"return_type must be 'mixed', 'numeric', 'categorical', or 'both'")
+            raise ValueError(
+                f"return_type debe ser 'mixed', 'numeric', 'categorical' o 'both', "
+                f"se recibió: '{return_type}'"
+            )
 
+        # return_type in ('mixed', 'numeric', 'categorical')
+        if return_metadata:
+            return (*result, metadata)
+        return result
 
     # ------------------------------------------------------------------ #
     #  API pública — archivos (imágenes, audio, genérico)                 #
@@ -365,18 +549,22 @@ class DataLoader:
         """
         Carga genérica de archivos organizados en subcarpetas por clase.
 
+        API de bajo nivel: el usuario provee su propia función de carga.
+        Para imágenes y audio se recomienda usar ``load_images`` y
+        ``load_audio`` respectivamente.
+
         Parámetros
         ----------
         name       : nombre del dataset en el repositorio
-        extensions : tupla de extensiones a incluir, ej: ('.wav', '.mp3')
-        loader_fn  : función (file_path: str) -> np.ndarray
-                     Se llama una vez por archivo y debe devolver un array numpy.
+        extensions : tupla de extensiones a incluir, ej: ``('.wav', '.mp3')``
+        loader_fn  : función ``(file_path: str) -> np.ndarray``
+                     Se llama una vez por archivo.
 
         Retorna
         -------
-        X           : np.ndarray — array con todos los samples
+        X           : np.ndarray — array con todos los samples apilados
         y           : np.ndarray (int) — índices de clase para cada sample
-        class_names : list[str] — class_names[y[i]] es la clase del sample i
+        class_names : list[str] — ``class_names[y[i]]`` es la clase del sample ``i``
         """
         local_path = cls._require_repo_directory(name)
         root_path = cls._find_data_path(local_path)
@@ -410,22 +598,28 @@ class DataLoader:
             random_state=None
     ):
         """
-        Versión lazy de load_files. Devuelve un tf.data.Dataset sin configurar.
+        Versión lazy de ``load_files``. Devuelve un ``tf.data.Dataset``
+        sin configurar (sin batch, prefetch ni augmentation).
+
+        API de bajo nivel: para imágenes y audio se recomienda usar
+        ``load_images_dataset`` y ``load_audio_dataset`` respectivamente.
 
         Parámetros
         ----------
         name          : nombre del dataset en el repositorio
         extensions    : tupla de extensiones válidas
-        loader_fn     : función (file_path:str) -> np.ndarray
-        shuffle       : mezcla aleatoriamente las muestras
-        random_state  : semilla para reproducibilidad
+        loader_fn     : función ``(file_path: str) -> np.ndarray``
+        sample_shape  : shape estático del sample para ``set_shape``; útil
+                        cuando todos los samples tienen la misma forma
+        sample_dtype  : dtype TensorFlow de los samples (default: ``tf.float32``)
+        shuffle       : si True mezcla aleatoriamente antes de crear el dataset
+        random_state  : semilla para reproducibilidad del shuffle
 
         Retorna
         -------
-        ds          : tf.data.Dataset que emite pares (sample, label)
+        ds          : tf.data.Dataset que emite pares ``(sample, label)``
         class_names : list[str]
         """
-
         local_path = cls._require_repo_directory(name)
         root_path = cls._find_data_path(local_path)
         class_names, file_list = cls._scan_classes(root_path, extensions)
@@ -433,11 +627,9 @@ class DataLoader:
         paths = [fp for fp, _ in file_list]
         labels = [lb for _, lb in file_list]
 
-        # Mezcla previa de rutas y etiquetas
         if shuffle:
             rng = np.random.default_rng(random_state)
             indices = rng.permutation(len(paths))
-
             paths = [paths[i] for i in indices]
             labels = [labels[i] for i in indices]
 
@@ -449,16 +641,11 @@ class DataLoader:
                 inp=[file_path],
                 Tout=sample_dtype
             )
-
             if sample_shape is not None:
                 sample.set_shape(sample_shape)
-
             return sample, label
 
-        ds = path_ds.map(
-            _load,
-            num_parallel_calls=tf.data.AUTOTUNE
-        )
+        ds = path_ds.map(_load, num_parallel_calls=tf.data.AUTOTUNE)
 
         return ds, class_names
 
@@ -468,20 +655,27 @@ class DataLoader:
 
     @classmethod
     def _default_image_loader(cls, resize=None):
-        """Devuelve una loader_fn para imágenes con resize opcional."""
+        """
+        Devuelve una ``loader_fn`` para imágenes.
 
+        Parámetros
+        ----------
+        resize : tupla ``(ancho, alto)`` para redimensionar; None conserva
+                 el tamaño original
+
+        Retorna
+        -------
+        loader : función ``(file_path: str) -> np.ndarray`` de shape
+                 ``(H, W, C)`` en ``float32``. Imágenes en escala de grises
+                 se expanden a ``(H, W, 1)``.
+        """
         def loader(file_path):
             img = Image.open(file_path)
-
             if resize:
                 img = img.resize(resize, Image.Resampling.LANCZOS)
-
             img = np.array(img, dtype=np.float32)
-
-            # Si es gris: (H,W) -> (H,W,1)
             if img.ndim == 2:
                 img = img[..., np.newaxis]
-
             return img
 
         return loader
@@ -491,100 +685,272 @@ class DataLoader:
         """
         Carga imágenes en memoria como arrays numpy.
 
+        Parámetros
+        ----------
+        name   : nombre del dataset en el repositorio
+        resize : tupla ``(ancho, alto)`` para redimensionar todas las imágenes
+                 a un tamaño común. Si es None se conserva el tamaño original
+                 (puede fallar al apilar si las imágenes tienen distintos tamaños).
+
         Retorna
         -------
-        X           : np.ndarray (N, H, W, C)
-        y           : np.ndarray (N,)  — índices de clase
+        X           : np.ndarray ``(N, H, W, C)`` en ``float32``
+        y           : np.ndarray ``(N,)`` — índices de clase
         class_names : list[str]
+        metadata    : dict con claves:
+
+                      - ``'color_space'``: ``'rgb'`` (valor fijo actual)
+                      - ``'resize'``: valor del parámetro ``resize``
         """
-        return cls.load_files(name, cls.IMAGE_EXTENSIONS,
-                              cls._default_image_loader(resize))
+        X, y, class_names = cls.load_files(
+            name,
+            cls.IMAGE_EXTENSIONS,
+            cls._default_image_loader(resize)
+        )
+        metadata = {'color_space': 'rgb', 'resize': resize}
+        return X, y, class_names, metadata
 
     @classmethod
-    def load_images_dataset(
-            cls,
-            name,
-            resize=None,
-            shuffle=False,
-            random_state=None
-    ):
+    def load_images_dataset(cls, name, resize=None, shuffle=False, random_state=None):
         """
-        Versión lazy de load_images. Devuelve tf.data.Dataset sin configurar.
+        Versión lazy de ``load_images``. Devuelve un ``tf.data.Dataset``
+        sin configurar (sin batch, prefetch ni augmentation).
 
         Parámetros
         ----------
-        name          : nombre del dataset
-        resize        : tamaño (ancho, alto)
-        shuffle       : mezcla aleatoriamente las muestras
-        random_state  : semilla para reproducibilidad
+        name         : nombre del dataset
+        resize       : tupla ``(ancho, alto)``; None conserva tamaño original
+        shuffle      : si True mezcla aleatoriamente las muestras
+        random_state : semilla para reproducibilidad del shuffle
 
         Retorna
         -------
-        ds          : tf.data.Dataset
+        ds          : tf.data.Dataset que emite pares ``(imagen, label)``
         class_names : list[str]
+        metadata    : dict con claves:
+
+                      - ``'color_space'``: ``'rgb'``
+                      - ``'resize'``: valor del parámetro ``resize``
         """
-        shape = None
-
+        sample_shape = None
         if resize is not None:
-            shape = (resize[1], resize[0], 1)
+            sample_shape = (resize[1], resize[0], 1)
 
-        return cls.load_files_dataset(
+        ds, class_names = cls.load_files_dataset(
             name,
             cls.IMAGE_EXTENSIONS,
             cls._default_image_loader(resize),
-            sample_shape=shape,
+            sample_shape=sample_shape,
             shuffle=shuffle,
             random_state=random_state
         )
+        metadata = {'color_space': 'rgb', 'resize': resize}
+        return ds, class_names, metadata
+
+    # ------------------------------------------------------------------ #
+    #  Shortcuts para audio                                                #
+    # ------------------------------------------------------------------ #
 
     @classmethod
-    def _default_audio_loader(cls,
-                              sample_rate=16000,
-                              duration=None,
-                              mono=True):
+    def _default_audio_loader(cls, sample_rate=None, fixed_duration=None, mono=True):
+        """
+        Devuelve una ``loader_fn`` para archivos de audio.
 
+        Parámetros
+        ----------
+        sample_rate    : frecuencia de muestreo objetivo en Hz. Si es None
+                         se respeta el sample rate original del archivo
+                         (equivalente a ``librosa.load(sr=None)``).
+        fixed_duration : duración fija en segundos a la que se normaliza cada
+                         audio. Los audios más cortos se rellenan con ceros;
+                         los más largos se recortan. Si es None se respeta la
+                         duración original.
+        mono           : si True convierte a mono ``(T,)``; si False conserva
+                         los canales en formato ``(C, T)``.
+
+        Retorna
+        -------
+        loader : función ``(file_path: str) -> np.ndarray`` en ``float32``
+        """
         def loader(file_path):
-            audio, sr = librosa.load(
-                file_path,
-                sr=sample_rate,
-                mono=mono
-            )
+            audio, sr = librosa.load(file_path, sr=sample_rate, mono=mono)
 
-            if duration is not None:
-                n_samples = int(sample_rate * duration)
+            if fixed_duration is not None:
+                # Usar el sr efectivo: el solicitado o el original del archivo
+                effective_sr = sample_rate if sample_rate is not None else sr
+                n_samples = int(effective_sr * fixed_duration)
 
-                if len(audio) < n_samples:
-                    audio = np.pad(
-                        audio,
-                        (0, n_samples - len(audio))
-                    )
+                if mono:
+                    # shape: (T,)
+                    if len(audio) < n_samples:
+                        audio = np.pad(audio, (0, n_samples - len(audio)))
+                    else:
+                        audio = audio[:n_samples]
                 else:
-                    audio = audio[:n_samples]
+                    # shape: (C, T) — librosa devuelve canales en eje 0
+                    T = audio.shape[-1]
+                    if T < n_samples:
+                        audio = np.pad(audio, ((0, 0), (0, n_samples - T)))
+                    else:
+                        audio = audio[..., :n_samples]
 
             return audio.astype(np.float32)
 
         return loader
 
     @classmethod
-    def load_audio_dataset(cls,
-                           name,
-                           sample_rate=16000,
-                           duration=None):
+    def _detect_sample_rate(cls, name):
+        """
+        Detecta el sample rate del primer archivo de audio del dataset.
 
-        sample_shape = None
+        Se usa ``librosa.get_samplerate`` para evitar cargar el audio completo.
 
-        if duration is not None:
-            sample_shape = (int(sample_rate * duration),)
+        Parámetros
+        ----------
+        name : nombre del dataset (debe estar ya disponible localmente)
 
-        return cls.load_files_dataset(
+        Retorna
+        -------
+        int — sample rate en Hz, o None si no se encuentra ningún archivo
+        """
+        local_path = os.path.join(cls._resource_path, name.lower())
+        root_path = cls._find_data_path(local_path)
+
+        for dirpath, _, filenames in os.walk(root_path):
+            for fname in sorted(filenames):
+                if fname.lower().endswith(cls.AUDIO_EXTENSIONS):
+                    return librosa.get_samplerate(os.path.join(dirpath, fname))
+        return None
+
+    @classmethod
+    def load_audio(cls, name, sample_rate=None, fixed_duration=None, mono=True):
+        """
+        Carga archivos de audio en memoria como arrays numpy.
+
+        Parámetros
+        ----------
+        name           : nombre del dataset en el repositorio
+        sample_rate    : frecuencia de muestreo objetivo en Hz. Si es None
+                         se respeta el sample rate original de cada archivo.
+                         Si los archivos tienen sample rates distintos y no se
+                         especifica ``fixed_duration``, el apilado puede fallar.
+        fixed_duration : duración fija en segundos. Los audios más cortos se
+                         rellenan con ceros; los más largos se recortan.
+                         Si es None se respeta la duración original de cada archivo.
+        mono           : si True convierte a mono; si False conserva los canales.
+
+        Retorna
+        -------
+        X           : np.ndarray ``(N, T)`` si mono, ``(N, C, T)`` si no
+        y           : np.ndarray ``(N,)`` — índices de clase
+        class_names : list[str]
+        metadata    : dict con claves:
+
+                      - ``'sample_rate'``: sr efectivamente usado (detectado
+                        automáticamente si no se especificó)
+                      - ``'mono'``: valor del parámetro ``mono``
+                      - ``'fixed_duration'``: valor del parámetro ``fixed_duration``
+        """
+        # Descarga el dataset antes de intentar detectar el sr
+        cls._require_repo_directory(name)
+
+        effective_sr = sample_rate
+        if effective_sr is None:
+            effective_sr = cls._detect_sample_rate(name)
+            if effective_sr is not None:
+                print(f"  sample_rate detectado: {effective_sr} Hz")
+
+        X, y, class_names = cls.load_files(
             name,
             cls.AUDIO_EXTENSIONS,
             cls._default_audio_loader(
                 sample_rate=sample_rate,
-                duration=duration
-            ),
-            sample_shape=sample_shape
+                fixed_duration=fixed_duration,
+                mono=mono
+            )
         )
+        metadata = {
+            'sample_rate': effective_sr,
+            'mono': mono,
+            'fixed_duration': fixed_duration
+        }
+        return X, y, class_names, metadata
+
+    @classmethod
+    def load_audio_dataset(cls,
+                           name,
+                           sample_rate=None,
+                           fixed_duration=None,
+                           mono=True,
+                           shuffle=False,
+                           random_state=None):
+        """
+        Versión lazy de ``load_audio``. Devuelve un ``tf.data.Dataset``
+        sin configurar (sin batch, prefetch ni augmentation).
+
+        Parámetros
+        ----------
+        name           : nombre del dataset en el repositorio
+        sample_rate    : frecuencia de muestreo objetivo en Hz. Si es None
+                         se respeta el sample rate original de cada archivo.
+        fixed_duration : duración fija en segundos para normalizar todos los
+                         audios. Si es None el shape del sample no se fija
+                         (requiere batch con padding o audios de igual longitud).
+        mono           : si True convierte a mono; si False conserva los canales.
+        shuffle        : si True mezcla aleatoriamente las muestras
+        random_state   : semilla para reproducibilidad del shuffle
+
+        Retorna
+        -------
+        ds          : tf.data.Dataset que emite pares ``(audio, label)``
+        class_names : list[str]
+        metadata    : dict con claves:
+
+                      - ``'sample_rate'``: sr efectivamente usado (detectado
+                        automáticamente si no se especificó)
+                      - ``'mono'``: valor del parámetro ``mono``
+                      - ``'fixed_duration'``: valor del parámetro ``fixed_duration``
+
+        Nota
+        ----
+        A diferencia de ``load_audio``, el dataset es lazy: los archivos no se
+        leen al llamar esta función sino al iterar el dataset. Por eso el
+        ``sample_rate`` se detecta inspeccionando el primer archivo sin cargarlo
+        completo (``librosa.get_samplerate``).
+        """
+        # Descarga el dataset antes de intentar detectar el sr
+        cls._require_repo_directory(name)
+
+        effective_sr = sample_rate
+        if effective_sr is None:
+            effective_sr = cls._detect_sample_rate(name)
+            if effective_sr is not None:
+                print(f"  sample_rate detectado: {effective_sr} Hz")
+
+        sample_shape = None
+        if fixed_duration is not None and effective_sr is not None:
+            n = int(effective_sr * fixed_duration)
+            sample_shape = (n,) if mono else (2, n)
+
+        ds, class_names = cls.load_files_dataset(
+            name,
+            cls.AUDIO_EXTENSIONS,
+            cls._default_audio_loader(
+                sample_rate=sample_rate,
+                fixed_duration=fixed_duration,
+                mono=mono
+            ),
+            sample_shape=sample_shape,
+            sample_dtype=tf.float32,
+            shuffle=shuffle,
+            random_state=random_state
+        )
+        metadata = {
+            'sample_rate': effective_sr,
+            'mono': mono,
+            'fixed_duration': fixed_duration
+        }
+        return ds, class_names, metadata
 
 
 DataLoader._initialize_class()

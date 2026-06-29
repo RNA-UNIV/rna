@@ -53,8 +53,8 @@ _figures = {}
 def _init_figure(fig_id, entradas, salida, titulos):
     if ENV == 'script':
         plt.ion()
-    # plt.rcParams['figure.figsize'] = [4, 3]
-    fig, ax = plt.subplots(figsize=(4, 3))
+
+    fig, ax = plt.subplots()
 
     # ── Cambiar fondos a gris claro ────────────────────────
     #fig.patch.set_facecolor('#f0f0f0')      # fondo de la figura
