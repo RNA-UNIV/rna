@@ -84,13 +84,13 @@ class NeuronaLineal(NeuronaBase):
 
             self.errors_.append(ErrorAct)
 
-            if self.verbose:
-                y_pred = self.predict(X)
-                self._show_progress(i, y, y_pred)
-
             # graficar la recta
             if (self.draw):
                 ph = dibuPtosRecta(puntos, T, np.array([self.w_, -1], dtype=object), self.b_, self.title, ph)
+
+            if self.verbose:
+                y_pred = self.predict(X)
+                self._show_progress(i, y, y_pred)
 
             i = i + 1
 
