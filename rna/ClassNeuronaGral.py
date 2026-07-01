@@ -43,10 +43,10 @@ class NeuronaGradiente(NeuronaBase):
 
     def _check_cost_and_activation(self):
         if self.FUN not in ('sigmoid', 'tanh', 'linear'):
-            self.FUN = 'linear'
+            raise ValueError(f"Función de activación no soportada: {self.FUN}")
         # Si es ECM, cualquier activación vale (incluyendo linear)
         if self.COSTO not in ('ECM', 'EC_binaria'):
-            self.COSTO = 'ECM'
+            raise ValueError(f"Función de costo no soportada: {self.COSTO}")
 
         if self.COSTO == 'ECM':
             return  # ECM funciona con cualquier activación
@@ -55,7 +55,7 @@ class NeuronaGradiente(NeuronaBase):
         if self.COSTO == 'EC_binaria' and self.FUN == 'sigmoid':
             return
 
-        raise ValueError(f"Combinación no soportada: {self.COSTO} + {self.FUN}")
+        raise ValueError(f"Combinación de funciones inválida: {self.COSTO} + {self.FUN}")
 
     def fit(self, X, y):
         """Fit training data.

@@ -40,6 +40,25 @@ class RNMulticlase(NeuronaBase):
         self.random_state = random_state
         self.verbose = verbose
 
+    def _check_cost_and_activation(self):
+        activaciones_validas = ('sigmoid', 'tanh', 'linear', 'softmax')
+        costos_validos = ('ECM', 'EC_binaria', 'EC', 'EC_categorica')
+
+        if self.FUN not in activaciones_validas:
+            raise ValueError(f"Función de activación no soportada: {self.FUN}")
+        if self.COSTO not in costos_validos:
+            raise ValueError(f"Función de costo no soportada: {self.COSTO}")
+
+        if self.COSTO == 'ECM':
+            return  # compatible con cualquier activación
+
+        if self.COSTO == 'EC_binaria' and self.FUN == 'sigmoid':
+            return  # clasificación binaria, una neurona
+
+        if self.COSTO in ('EC', 'EC_categorica') and self.FUN == 'softmax':
+            return  # clasificación multiclase, múltiples neuronas
+
+        raise ValueError(f"Combinación de funciones inválida: {self.COSTO} + {self.FUN}.\n")
 
     def fit(self, X, y):
         """Fit training data.
@@ -55,6 +74,8 @@ class RNMulticlase(NeuronaBase):
         self : object
         """
 
+        self._check_cost_and_activation()
+
         # Asegurar que X e y sean arrays de tipo float
         X = np.array(X, dtype=float)
         y = np.array(y, dtype=float)
@@ -63,38 +84,38 @@ class RNMulticlase(NeuronaBase):
 
         # self.w_ = rgen.normal(loc=0.0, scale=0.01,size=1 + X.shape[1])
         nRow = X.shape[0]  # cantidad de ejemplos
-        nIn  = X.shape[1]  # cantidad de atributos de entrada
-        nOut = y.shape[1]  # cantidad de neuronas de salida (deben ser por lo menos 2)
+        nIn = X.shape[1]  # cantidad de atributos de entrada ---
+        nOut = y.shape[1]  # -- cantidad de neuronas de salida (deben ser por lo menos 2)
 
-        # self.w_ = np.random.uniform(-0.5, 0.5, [nOut, nIn])
-        # self.b_ = np.random.uniform(-0.5, 0.5, [nOut,1])
-        self._weights_init(nIn, nOut)
+        self.w_ = np.random.uniform(-0.5, 0.5, [nOut, nIn])
+        self.b_ = np.random.uniform(-0.5, 0.5, [nOut, 1])
+
         self.errors_ = []
         self.accuracy_ = []
         ErrorAnt = 0
         ErrorAct = 1
 
         i = 0
-        while ((i<self.epochs) and (np.abs(ErrorAnt- ErrorAct) > self.cotaE)):
+        while (i < self.epochs) and (np.abs(ErrorAnt - ErrorAct) > self.cotaE):
             ErrorAnt = ErrorAct
             ErrorAct = 0
             for e in range(nRow):
 
-                xi = X[e:e+1,:]
+                xi = X[e:e + 1, :]
 
-                salida = self.predict_nOut(xi).T
-                errorXi = (y[e:e+1, :].T - salida)
+                salida = self.predict(xi).T
+                errorXi = (y[e:e + 1, :].T - salida)
 
-                # Caso especial: Softmax + EC tienen derivada simplificada
-                if (self.FUN == 'softmax' and self.COSTO == 'EC'):
-                    update = self.alpha * errorXi
-                else:
+                # Caso especial: EC_binaria y EC tienen derivada simplificada
+                if self.COSTO == 'ECM':
                     update = self.alpha * errorXi * self.derivar(salida)
+                else:
+                    update = self.alpha * errorXi
 
                 self.w_ += update * xi
                 self.b_ += update
 
-                ErrorAct += self.fCosto(y[e:e+1, :].T, salida)
+                ErrorAct += self.fCosto(y[e:e + 1, :].T, salida)
 
             ErrorAct = ErrorAct / nRow
             self.errors_.append(ErrorAct)
@@ -127,16 +148,17 @@ class RNMulticlase(NeuronaBase):
         loss = self.fCosto(np.argmax(y_true), y_pred)
         loss /= y_true.shape[0]
 
-        return (self.COSTO.lower(), loss)
+        return self.COSTO.lower(), loss
 
     def fCosto(self, y, y_hat):
         EPS = np.finfo(float).eps
-        if (self.COSTO == 'ECM'):
-            return(np.sum((y - y_hat)**2))
-        if (self.COSTO == 'EC_binaria'):
-            return(np.sum(-y * np.log(y_hat + EPS) - (1 - y) * np.log(1 - y_hat + EPS)))
-        if (self.COSTO == 'EC'):
-            return(np.sum(-y * np.log(y_hat + EPS)))
+        if self.COSTO == 'ECM':
+            return np.sum((y - y_hat) ** 2)
+        if self.COSTO == 'EC_binaria':
+            return np.sum(-y * np.log(y_hat + EPS) - (1 - y) * np.log(1 - y_hat + EPS))
+        if self.COSTO in ('EC', 'EC_categorica'):
+            return np.sum(-y * np.log(y_hat + EPS))
+        return None
 
     def net_input(self, X):
         """Calculate net input"""
@@ -144,38 +166,39 @@ class RNMulticlase(NeuronaBase):
         return netas.T
 
     def evaluar(self, x):
-        if (self.FUN == 'tanh'):
-            return (2.0 / (1 + np.exp(-2 * x)) - 1)
-        elif (self.FUN == 'sigmoid'):
-            return (1.0 / (1 + np.exp(-x)))
-        elif (self.FUN == 'softmax'):
-            return (np.exp(x) / (np.sum(np.exp(x), axis=1).reshape(-1, 1)))
+        if self.FUN == 'tanh':
+            return 2.0 / (1 + np.exp(-2 * x)) - 1
+        elif self.FUN == 'sigmoid':
+            return 1.0 / (1 + np.exp(-x))
+        elif self.FUN == 'softmax':
+            return np.exp(x) / (np.sum(np.exp(x), axis=1).reshape(-1, 1))
         else:
-            return(x)
+            return x
 
     def derivar(self, x):
-        if (self.FUN == 'tanh'):
-            return (1 - x**2)
-        elif (self.FUN == 'sigmoid'):
-            return (x * (1 - x))
+        if self.FUN == 'tanh':
+            return 1 - x ** 2
+        elif self.FUN == 'sigmoid':
+            return x * (1 - x)
         else:
-            return(1)
+            return 1
 
-    def predict_nOut(self, X):
+    def predict(self, X):
         """Return class label after unit step"""
         return self.evaluar(self.net_input(X))
 
-    def predict(self, X):
-        """Retorna un entero con el índice de la clase más probable"""
-        y_hat = self.predict_nOut(X)
-        if (self.FUN == 'tanh'):
+    def predict_clase(self, X):
+        """Retorna un entero con el ìndice de la clase más probable """
+        y_hat = self.predict(X)
+        if self.FUN == 'tanh':
             y_hat = (y_hat > 0) * 1
-        if (self.FUN == 'sigmoid'):
+        if self.FUN == 'sigmoid':
             y_hat = (y_hat > 0.5) * 1
+
         return np.argmax(y_hat, axis=1)
 
     def _calc_accuracy(self, y_real, y_pred):
-        return(np.sum(np.argmax(y_real, axis=1) == y_pred) / y_real.shape[0])
+        return np.sum(np.argmax(y_real, axis=1) == y_pred) / y_real.shape[0]
 
     def accuracy(self, X, y):
         return self._calc_accuracy(y, self.predict(X))
