@@ -2,6 +2,7 @@ import os
 import json
 import subprocess
 import time
+import unicodedata
 import zipfile
 
 import numpy as np
@@ -23,6 +24,11 @@ class DataLoader:
     Soporta datasets tabulares (CSV), de imágenes y de audio organizados en
     subcarpetas por clase. Los archivos se descargan automáticamente la primera
     vez y se cachean localmente en ``../rna_downloads/data/``.
+
+    Los datasets pueden referenciarse por su nombre canónico o por cualquier
+    alias definido en ``dataset_aliases.json`` (ej: ``'wine'`` == ``'vinos'``).
+    La resolución de alias es best-effort: si un nombre no está en el índice
+    de alias, se asume que ya es el nombre canónico y se intenta usar tal cual.
 
     Uso básico
     ----------
@@ -49,6 +55,10 @@ class DataLoader:
     _raw_base_url = "https://raw.githubusercontent.com/RNA-UNIV/datasets/main"
     _releases_base_url = "https://github.com/RNA-UNIV/datasets/releases/download/large_datasets"
     _resource_path = None
+
+    # Alias de datasets (ej: 'vinos' -> 'wine')
+    _aliases_file = 'dataset_aliases.json'
+    _alias_map = None
 
     # Extensiones soportadas por tipo
     IMAGE_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.bmp', '.gif', '.webp')
@@ -191,18 +201,86 @@ class DataLoader:
 
         os.remove(zip_path)
 
+    # ------------------------------------------------------------------ #
+    #  Alias de datasets                                                   #
+    # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def _normalize(name):
+        """
+        Normaliza un nombre para comparación: minúsculas, sin acentos,
+        espacios/guiones convertidos a ``_``.
+        """
+        name = name.strip().lower().replace(' ', '_').replace('-', '_')
+        name = unicodedata.normalize('NFKD', name).encode('ascii', 'ignore').decode()
+        return name
+
+    @classmethod
+    def _load_alias_map(cls):
+        """
+        Carga (y cachea en memoria) el mapa de alias -> nombre canónico.
+
+        Se descarga una única vez ``dataset_aliases.json`` desde el
+        repositorio y se cachea localmente. Es un mecanismo best-effort:
+        si el archivo no existe o falla la descarga, se continúa sin
+        alias (no rompe el acceso a datasets por su nombre canónico).
+        """
+        if cls._alias_map is not None:
+            return cls._alias_map
+
+        local_file = os.path.join(cls._resource_path, cls._aliases_file)
+        if not os.path.exists(local_file):
+            try:
+                url = f"{cls._raw_base_url}/{cls._aliases_file}"
+                cls._download_file(url, local_file, verbose=False)
+            except requests.RequestException:
+                cls._alias_map = {}
+                return cls._alias_map
+
+        try:
+            with open(local_file, 'r', encoding='utf-8') as f:
+                raw = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            cls._alias_map = {}
+            return cls._alias_map
+
+        alias_map = {}
+        for canonical, alias_list in raw.items():
+            alias_map[cls._normalize(canonical)] = canonical
+            for alias in alias_list:
+                alias_map[cls._normalize(alias)] = canonical
+
+        cls._alias_map = alias_map
+        return cls._alias_map
+
+    @classmethod
+    def _resolve(cls, name):
+        """
+        Resuelve un posible alias al nombre canónico del dataset.
+
+        Si ``name`` no aparece en el índice de alias, se devuelve tal
+        cual: se asume que ya es el nombre canónico y es el flujo normal
+        de descarga (``_require_repo_directory``) el que determina si
+        el dataset existe o no.
+        """
+        alias_map = cls._load_alias_map()
+        key = cls._normalize(name)
+        return alias_map.get(key, name)
+
     @classmethod
     def _require_repo_directory(cls, name, force=False):
         """
         Garantiza que el dataset ``name`` esté disponible localmente.
 
-        Intenta descargar primero desde el repositorio raw y luego desde
-        GitHub Releases para archivos grandes. Usa un archivo centinela
-        ``.complete`` para evitar descargas repetidas.
+        Resuelve alias antes de cualquier otra cosa. Intenta descargar
+        primero desde el repositorio raw y luego desde GitHub Releases
+        para archivos grandes. Usa un archivo centinela ``.complete``
+        para evitar descargas repetidas.
 
         Parámetros
         ----------
-        name  : nombre del dataset (se normaliza a minúsculas)
+        name  : nombre del dataset (se resuelve el alias y se normaliza
+                a minúsculas)
         force : si True fuerza la descarga aunque el dataset ya exista
 
         Retorna
@@ -213,7 +291,7 @@ class DataLoader:
         ------
         FileNotFoundError : si el dataset no se encuentra en el repositorio
         """
-        name = name.lower()
+        name = cls._resolve(name).lower()
         local_path = os.path.abspath(os.path.join(cls._resource_path, name))
         os.makedirs(local_path, exist_ok=True)
 
@@ -354,9 +432,11 @@ class DataLoader:
         """
         Devuelve la ruta local al dataset, descargándolo si es necesario.
 
+        Acepta nombre canónico o alias.
+
         Parámetros
         ----------
-        name : nombre del dataset
+        name : nombre del dataset (o alias)
 
         Retorna
         -------
@@ -369,9 +449,11 @@ class DataLoader:
         """
         Descarga y retorna el archivo ``info.json`` del dataset.
 
+        Acepta nombre canónico o alias.
+
         Parámetros
         ----------
-        name  : nombre del dataset
+        name  : nombre del dataset (o alias)
         force : si True fuerza la descarga aunque el archivo ya exista
 
         Retorna
@@ -382,7 +464,7 @@ class DataLoader:
         ------
         FileNotFoundError : si no existe ``info.json`` para el dataset
         """
-        name = name.lower()
+        name = cls._resolve(name).lower()
         local_path = os.path.join(cls._resource_path, name)
         os.makedirs(local_path, exist_ok=True)
 
@@ -409,7 +491,7 @@ class DataLoader:
 
         Parámetros
         ----------
-        name  : nombre del dataset
+        name  : nombre del dataset (o alias)
         force : si True fuerza la descarga del ``info.json``
         """
         info_data = cls.dataset_info(name, force)
@@ -417,7 +499,7 @@ class DataLoader:
             from IPython import get_ipython
             from IPython.display import display, JSON
             if get_ipython() is not None:
-                display(JSON(info_data, root=name))
+                display(JSON(info_data, root=cls._resolve(name)))
             else:
                 raise RuntimeError
         except (ImportError, RuntimeError):
@@ -428,13 +510,14 @@ class DataLoader:
         """
         Carga un dataset tabular como ``pd.DataFrame``.
 
-        La codificación y el separador se detectan automáticamente si no se
-        especifican. Los valores típicos de missing (``'?'``, ``'NA'``,
-        ``'null'``, etc.) se reemplazan por ``NaN``.
+        Acepta nombre canónico o alias. La codificación y el separador se
+        detectan automáticamente si no se especifican. Los valores típicos
+        de missing (``'?'``, ``'NA'``, ``'null'``, etc.) se reemplazan por
+        ``NaN``.
 
         Parámetros
         ----------
-        name            : nombre del dataset en el repositorio
+        name            : nombre del dataset (o alias) en el repositorio
         encoding        : codificación del CSV (ej: ``'utf-8'``); se autodetecta si es None
         separator       : separador del CSV (``','``, ``';'``, ``'\\t'``); se autodetecta si es None
         return_metadata : si True retorna también un dict con ``'encoding'`` y
@@ -471,9 +554,11 @@ class DataLoader:
         """
         Carga un dataset tabular como array numpy.
 
+        Acepta nombre canónico o alias.
+
         Parámetros
         ----------
-        name            : nombre del dataset
+        name            : nombre del dataset (o alias)
         encoding        : codificación del CSV; se autodetecta si es None
         separator       : separador del CSV; se autodetecta si es None
         return_type     : controla qué columnas se incluyen:
@@ -549,13 +634,13 @@ class DataLoader:
         """
         Carga genérica de archivos organizados en subcarpetas por clase.
 
-        API de bajo nivel: el usuario provee su propia función de carga.
-        Para imágenes y audio se recomienda usar ``load_images`` y
-        ``load_audio`` respectivamente.
+        Acepta nombre canónico o alias. API de bajo nivel: el usuario
+        provee su propia función de carga. Para imágenes y audio se
+        recomienda usar ``load_images`` y ``load_audio`` respectivamente.
 
         Parámetros
         ----------
-        name       : nombre del dataset en el repositorio
+        name       : nombre del dataset (o alias) en el repositorio
         extensions : tupla de extensiones a incluir, ej: ``('.wav', '.mp3')``
         loader_fn  : función ``(file_path: str) -> np.ndarray``
                      Se llama una vez por archivo.
@@ -601,12 +686,13 @@ class DataLoader:
         Versión lazy de ``load_files``. Devuelve un ``tf.data.Dataset``
         sin configurar (sin batch, prefetch ni augmentation).
 
-        API de bajo nivel: para imágenes y audio se recomienda usar
-        ``load_images_dataset`` y ``load_audio_dataset`` respectivamente.
+        Acepta nombre canónico o alias. API de bajo nivel: para imágenes
+        y audio se recomienda usar ``load_images_dataset`` y
+        ``load_audio_dataset`` respectivamente.
 
         Parámetros
         ----------
-        name          : nombre del dataset en el repositorio
+        name          : nombre del dataset (o alias) en el repositorio
         extensions    : tupla de extensiones válidas
         loader_fn     : función ``(file_path: str) -> np.ndarray``
         sample_shape  : shape estático del sample para ``set_shape``; útil
@@ -685,9 +771,11 @@ class DataLoader:
         """
         Carga imágenes en memoria como arrays numpy.
 
+        Acepta nombre canónico o alias.
+
         Parámetros
         ----------
-        name   : nombre del dataset en el repositorio
+        name   : nombre del dataset (o alias) en el repositorio
         resize : tupla ``(ancho, alto)`` para redimensionar todas las imágenes
                  a un tamaño común. Si es None se conserva el tamaño original
                  (puede fallar al apilar si las imágenes tienen distintos tamaños).
@@ -716,9 +804,11 @@ class DataLoader:
         Versión lazy de ``load_images``. Devuelve un ``tf.data.Dataset``
         sin configurar (sin batch, prefetch ni augmentation).
 
+        Acepta nombre canónico o alias.
+
         Parámetros
         ----------
-        name         : nombre del dataset
+        name         : nombre del dataset (o alias)
         resize       : tupla ``(ancho, alto)``; None conserva tamaño original
         shuffle      : si True mezcla aleatoriamente las muestras
         random_state : semilla para reproducibilidad del shuffle
@@ -807,7 +897,8 @@ class DataLoader:
 
         Parámetros
         ----------
-        name : nombre del dataset (debe estar ya disponible localmente)
+        name : nombre canónico del dataset (ya resuelto; debe estar
+               disponible localmente)
 
         Retorna
         -------
@@ -827,9 +918,11 @@ class DataLoader:
         """
         Carga archivos de audio en memoria como arrays numpy.
 
+        Acepta nombre canónico o alias.
+
         Parámetros
         ----------
-        name           : nombre del dataset en el repositorio
+        name           : nombre del dataset (o alias) en el repositorio
         sample_rate    : frecuencia de muestreo objetivo en Hz. Si es None
                          se respeta el sample rate original de cada archivo.
                          Si los archivos tienen sample rates distintos y no se
@@ -851,6 +944,10 @@ class DataLoader:
                       - ``'mono'``: valor del parámetro ``mono``
                       - ``'fixed_duration'``: valor del parámetro ``fixed_duration``
         """
+        # Resolver alias una sola vez: se reutiliza tanto para la descarga
+        # como para la detección de sample rate.
+        name = cls._resolve(name)
+
         # Descarga el dataset antes de intentar detectar el sr
         cls._require_repo_directory(name)
 
@@ -888,9 +985,11 @@ class DataLoader:
         Versión lazy de ``load_audio``. Devuelve un ``tf.data.Dataset``
         sin configurar (sin batch, prefetch ni augmentation).
 
+        Acepta nombre canónico o alias.
+
         Parámetros
         ----------
-        name           : nombre del dataset en el repositorio
+        name           : nombre del dataset (o alias) en el repositorio
         sample_rate    : frecuencia de muestreo objetivo en Hz. Si es None
                          se respeta el sample rate original de cada archivo.
         fixed_duration : duración fija en segundos para normalizar todos los
@@ -918,6 +1017,10 @@ class DataLoader:
         ``sample_rate`` se detecta inspeccionando el primer archivo sin cargarlo
         completo (``librosa.get_samplerate``).
         """
+        # Resolver alias una sola vez: se reutiliza tanto para la descarga
+        # como para la detección de sample rate.
+        name = cls._resolve(name)
+
         # Descarga el dataset antes de intentar detectar el sr
         cls._require_repo_directory(name)
 
