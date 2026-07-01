@@ -198,7 +198,7 @@ class RNMulticlase(NeuronaBase):
         return np.argmax(y_hat, axis=1)
 
     def _calc_accuracy(self, y_real, y_pred):
-        return np.sum(np.argmax(y_real, axis=1) == y_pred) / y_real.shape[0]
+        return np.sum(np.argmax(y_real, axis=1) == np.argmax(y_pred, axis=1)) / y_real.shape[0]
 
     def accuracy(self, X, y):
         return self._calc_accuracy(y, self.predict(X))
