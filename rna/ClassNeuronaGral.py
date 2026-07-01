@@ -39,6 +39,23 @@ class NeuronaGradiente(NeuronaBase):
         self.draw = draw
         self.title = title
         self.verbose = verbose
+        self.accuracy_ = []
+
+    def _check_cost_and_activation(self):
+        if self.FUN not in ('sigmoid', 'tanh', 'linear'):
+            self.FUN = 'linear'
+        # Si es ECM, cualquier activación vale (incluyendo linear)
+        if self.COSTO not in ('ECM', 'EC_binaria'):
+            self.COSTO = 'ECM'
+
+        if self.COSTO == 'ECM':
+            return  # ECM funciona con cualquier activación
+
+        # Si es EC_binaria, solo sigmoid (para valores en 0-1)
+        if self.COSTO == 'EC_binaria' and self.FUN == 'sigmoid':
+            return
+
+        raise ValueError(f"Combinación no soportada: {self.COSTO} + {self.FUN}")
 
     def fit(self, X, y):
         """Fit training data.
@@ -54,10 +71,9 @@ class NeuronaGradiente(NeuronaBase):
         self : object
         """
 
+        self._check_cost_and_activation()
 
         rgen = np.random.RandomState(self.random_state)
-
-        # self.w_ = rgen.normal(loc=0.0, scale=0.01,size=1 + X.shape[1])
 
         self.w_ = rgen.uniform(-0.5, 0.5, size= X.shape[1])
         self.b_ = rgen.uniform(-0.5, 0.5)
@@ -69,86 +85,98 @@ class NeuronaGradiente(NeuronaBase):
         ErrorAct = 1
 
         i = 0
-        while ((i<self.epochs) and (np.absolute(ErrorAnt- ErrorAct) > self.cotaE)):
-            ErrorAnt = ErrorAct
-            ErrorAct = 0
+        try:
+            while ((i<self.epochs) and (np.absolute(ErrorAnt- ErrorAct) > self.cotaE)):
+                ErrorAnt = ErrorAct
+                ErrorAct = 0
 
-            for xi, target in zip(X, y):
-                salida = self.predict_nOut(xi)
-                errorXi = (target - salida)
+                for xi, target in zip(X, y):
+                    salida = self.predict(xi)
+                    errorXi = (target - salida)
 
-                update = self.alpha * errorXi * self.derivar(salida)
+                    update = self.alpha * self.deriv_fCosto(target, salida)
 
-                self.w_ += update * xi
-                self.b_ += update
+                    self.w_ += update * xi
+                    self.b_ += update
 
-                ErrorAct += self.fCosto(target, salida)
+                    ErrorAct += self.fCosto(target, salida)
 
-            self.errors_.append(ErrorAct)
-            self.accuracy_.append(self.accuracy(X,y))
+                self.errors_.append(ErrorAct)
+                self.accuracy_.append(self.accuracy(X, y))
 
-            # progreso de entrenamiento
-            if self.verbose:
-                y_pred = self.predict(X)
-                self._show_progress(i, y, y_pred)
-            # graficar la recta
+                # graficar la recta
+                if (self.draw):
+                    ph = dibuPtosRecta(X,y, self.w_, self.b_, self.title, ph)
+
+                # progreso de entrenamiento
+                if self.verbose:
+                    y_pred = self.predict(X)
+                    self._show_progress(i, y, y_pred)
+
+                i = i + 1
+        finally:
             if (self.draw):
-                ph = dibuPtosRecta(X,y, self.w_, self.b_, self.title, ph)
+                waitDibu(ph)
 
-            i = i + 1
+        if self.verbose:
+            print()  # Salto de línea al finalizar progreso
+
         return self
 
-    def fCosto(self,y, y_hat):
-        #-- y es el valor esperado e y_hat el valor obtenido (ambos escalares)
-        EPS = np.finfo(float).eps
-        if (self.COSTO=='ECM'):
-            return((y-y_hat)**2)
-        if (self.COSTO=='EC_binaria'):
-            return(-y*np.log(y_hat+EPS)-(1-y)*np.log(1-y_hat+EPS))
-        if (self.COSTO=='EC'):
-            return(-y*np.log(y_hat+EPS))
+    def fCosto(self, y, y_hat):
+        # -- y es el valor esperado e y_hat el valor obtenido (ambos escalares)
+        EPS = EPS = np.finfo(float).eps
+        if (self.COSTO == 'ECM'):
+            return ((y - y_hat) ** 2)
+        if (self.COSTO == 'EC_binaria'):
+            return (-y * np.log(y_hat + EPS) - (1 - y) * np.log(1 - y_hat + EPS))
         else:
-            return(np.absolute(y-y_hat))
-
+            return (np.absolute(y - y_hat))
 
     def net_input(self, X):
         """Calculate net input"""
         return np.dot(X, self.w_) + self.b_
 
     def evaluar(self, x):
-        if (self.FUN=='tanh'):
-            return (2.0 / (1+np.exp(-2*x)) - 1)
-        elif (self.FUN=='sigmoid'):
-            return (1.0/(1+np.exp(-x)))
+        if (self.FUN == 'tanh'):
+            return (2.0 / (1 + np.exp(-2 * x)) - 1)
+        elif (self.FUN == 'sigmoid'):
+            return (1.0 / (1 + np.exp(-x)))
         else:
-            return(x)
+            return (x)
 
-    def derivar(self,x):
-        if (self.FUN=='tanh'):
-            return (1-x**2)
-        elif (self.FUN=='sigmoid'):
-            return (x*(1-x))
+    def derivar(self, x):
+        if (self.FUN == 'tanh'):
+            return (1 - x ** 2)
+        elif (self.FUN == 'sigmoid'):
+            return (x * (1 - x))
         else:
-            return(1)
+            return (1)
 
-    def predict_nOut(self, X):
+    def deriv_fCosto(self, t, y):
+        if (self.COSTO == 'ECM'):
+            return (t - y) * self.derivar(y)
+        else:
+            return (t - y)
+
+    def predict(self, X):
         """Return class label after unit step"""
         return self.evaluar(self.net_input(X))
 
-    def predict(self, X):
+    def predict_clase(self, X):
         """Retorna un entero con el índice de la clase más probable """
-        y_hat = self.predict_nOut(X)
-        if (self.FUN=='tanh'):
-            return (2*(y_hat>0)*1-1)
-        elif (self.FUN=='sigmoid'):
-            return ((y_hat>0.5)*1)
+        y_hat = self.predict(X)
+        if (self.FUN == 'tanh'):
+            return (2 * (y_hat > 0) * 1 - 1)
+        elif (self.FUN == 'sigmoid'):
+            return ((y_hat > 0.5) * 1)
         else:
-            return(X)
+            return (X)
 
     def accuracy(self, X, y):
-        y_hat = self.predict(X)
-        OK = np.sum(y_hat==y)
-        return (OK/X.shape[0])
+        y_hat = self.predict_clase(X)
+        OK = np.sum(y_hat == y)
+        return (OK / X.shape[0])
 
     def _score_metric(self, y_true, y_pred):
         loss = self.fCosto(y_true, y_pred)

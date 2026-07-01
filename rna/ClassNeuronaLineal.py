@@ -1,4 +1,3 @@
-from rna.grafica import *
 from rna.ClassNeuronaBase import NeuronaBase
 
 
@@ -69,30 +68,33 @@ class NeuronaLineal(NeuronaBase):
         ErrorAct = 1
 
         i = 0
-        while ((i < self.epochs) and (np.abs(ErrorAnt - ErrorAct) > self.cotaE)):
-            ErrorAnt = ErrorAct
-            ErrorAct = 0
-            for xi, target in zip(X, y):
-                errorXi = (target - self.predict(xi))
-                update = self.alpha * errorXi
-                self.w_ += update * xi
-                self.b_ += update
+        try:
+          while ((i < self.epochs) and (np.abs(ErrorAnt - ErrorAct) > self.cotaE)):
+              ErrorAnt = ErrorAct
+              ErrorAct = 0
+              for xi, target in zip(X, y):
+                  errorXi = (target - self.predict(xi))
+                  update = self.alpha * errorXi
+                  self.w_ += update * xi
+                  self.b_ += update
 
-                ErrorAct += errorXi ** 2
+                  ErrorAct += errorXi ** 2
 
-            ErrorAct = ErrorAct / len(X)
+              self.errors_.append(ErrorAct / len(X))
 
-            self.errors_.append(ErrorAct)
+              # graficar la recta
+              if (self.draw):
+                  ph = dibuPtosRecta(puntos, T, np.array([self.w_, -1], dtype=object), self.b_, self.title, ph)
 
-            # graficar la recta
-            if (self.draw):
-                ph = dibuPtosRecta(puntos, T, np.array([self.w_, -1], dtype=object), self.b_, self.title, ph)
+              if self.verbose:
+                  y_pred = self.predict(X)
+                  self._show_progress(i, y, y_pred)
 
-            if self.verbose:
-                y_pred = self.predict(X)
-                self._show_progress(i, y, y_pred)
+              i = i + 1
 
-            i = i + 1
+        finally:
+          if self.draw:
+              waitDibu(ph)
 
         if self.verbose:
             print()  # Salto de línea al finalizar
@@ -100,6 +102,7 @@ class NeuronaLineal(NeuronaBase):
         return self
 
     def net_input(self, X):
+        """Calculate net input"""
         return np.dot(X, self.w_) + self.b_
 
     def predict(self, X):

@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
 
+
 # ── Detección de entorno ──────────────────────────────────────────
 def _detect_env():
     try:
@@ -17,6 +18,7 @@ def _detect_env():
         pass
     return 'script'
 
+
 def _setup_backend(env):
     if env == 'script':
         for backend in ['TkAgg', 'Qt5Agg', 'WXAgg', 'GTK3Agg']:
@@ -27,40 +29,53 @@ def _setup_backend(env):
                 return
             except Exception:
                 continue
-    else:
-        matplotlib.use('Agg')
+    # jupyter y colab: no tocar el backend, ya está configurado
+
 
 ENV = _detect_env()
 _setup_backend(ENV)
 
-# ── Paleta seaborn muted, 8 colores ──────────────────────────────
 _COLORES = [
-    '#4878cf',  # azul
-    '#d65f5f',  # rojo
-    '#59a14f',  # verde
-    '#af7aa1',  # violeta
-    '#e1a030',  # amarillo ocre
-    '#4db3be',  # teal
-    '#b07040',  # marrón
-    '#7070a0',  # gris azulado
+    # tab20 (índices pares)
+    '#1f77b4',  # azul
+    '#ff7f0e',  # naranja
+    '#2ca02c',  # verde
+    '#d62728',  # rojo
+    '#9467bd',  # violeta
+    '#8c564b',  # marrón
+    '#e377c2',  # rosa
+    '#7f7f7f',  # gris
+    '#bcbd22',  # oliva
+    '#17becf',  # cian
+
+    # Complementarios
+    '#8dd3c7',  # turquesa pastel (Set3)
+    '#ffed6f',  # amarillo claro (Set3)
+    '#80b1d3',  # azul claro (Set3)
+    '#b3de69',  # verde lima (Set3)
+    '#fb8072',  # coral (Set3)
+    '#bebada',  # lavanda (Set3)
 ]
 
-_COLOR_LINEA = '#444444'
+_COLOR_LINEA = _COLORES[-1]
+_FACE_COLOR = '#f0f0f0'
 
 # ── Registro de figuras ───────────────────────────────────────────
 _figures = {}
+
 
 def _init_figure(fig_id, entradas, salida, titulos):
     if ENV == 'script':
         plt.ion()
 
-    fig, ax = plt.subplots()
+    with plt.ioff():  # suprime el render automático de inline
+        fig, ax = plt.subplots()
 
     # ── Cambiar fondos a gris claro ────────────────────────
-    #fig.patch.set_facecolor('#f0f0f0')      # fondo de la figura
-    ax.set_facecolor('#f0f0f0')            # fondo del área del gráfico
-    ax.grid(True, color='black', alpha=1)
-
+    # fig.patch.set_facecolor('#f0f0f0')      # fondo de la figura
+    # ax.set_facecolor(_FACE_COLOR)           # fondo del área del gráfico
+    # ax.grid(True, color='black', alpha=1)
+    ax.grid(True, alpha=1)
     try:
         fig.canvas.manager.set_window_title(fig_id)
     except Exception:
@@ -70,8 +85,7 @@ def _init_figure(fig_id, entradas, salida, titulos):
     scatters = []
     for i, c in enumerate(clases):
         color = _COLORES[i % len(_COLORES)]
-        sc, = ax.plot([], [], 'o', color=color, zorder=3,
-                      label=str(c), markersize=6, alpha=0.85)
+        sc, = ax.plot([], [], 'o', color=color, zorder=3, label=str(c), markersize=6, alpha=0.85)
         scatters.append(sc)
     scatters = tuple(scatters)
 
@@ -93,13 +107,14 @@ def _init_figure(fig_id, entradas, salida, titulos):
         plt.show(block=False)
 
     _figures[fig_id] = {
-        'fig':        fig,
-        'ax':         ax,
-        'scatters':   scatters,
-        'line':       line,
-        'clases':     clases,
+        'fig': fig,
+        'ax': ax,
+        'scatters': scatters,
+        'line': line,
+        'clases': clases,
         'ipy_handle': ipy_handle,
     }
+
 
 def _render(fig_id):
     s = _figures[fig_id]
@@ -109,6 +124,7 @@ def _render(fig_id):
         plt.pause(0.01)
     else:
         s['ipy_handle'].update(s['fig'])
+
 
 # ── API pública ───────────────────────────────────────────────────
 def dibuPtosRecta(entradas, salida, W, b, titulos=[], fig_id='default', reset=False, titulo=''):
@@ -130,7 +146,7 @@ def dibuPtosRecta(entradas, salida, W, b, titulos=[], fig_id='default', reset=Fa
     if fig_id not in _figures:
         _init_figure(fig_id, entradas, salida, titulos)
 
-    s  = _figures[fig_id]
+    s = _figures[fig_id]
     ax = s['ax']
 
     ax.set_xlim(entradas[:, 0].min() - 0.05, entradas[:, 0].max() + 0.05)
@@ -156,16 +172,34 @@ def dibuPtosRecta(entradas, salida, W, b, titulos=[], fig_id='default', reset=Fa
 
     return fig_id
 
+
 def setTitulo(titulo, fig_id='default'):
     if fig_id in _figures:
         _figures[fig_id]['ax'].set_title(titulo)
         _render(fig_id)
 
+
 def waitDibu(fig_id='default'):
     """
-    Script  : bloquea hasta que el usuario cierre la ventana.
-    Notebook: no-op, el último frame ya quedó en el output via handle.update().
+    Cierra y libera la figura asociada a fig_id, dejando visible el último frame.
+    Script  : bloquea hasta que el usuario cierre la ventana, luego limpia.
+    Notebook: no bloquea; el último frame ya quedó en el output via handle.update().
+              Libera la entrada de _figures para que la próxima corrida no
+              encuentre estado viejo ni acumule figuras huérfanas.
     """
-    if ENV == 'script' and fig_id in _figures:
+    if fig_id not in _figures:
+        return
+
+    s = _figures[fig_id]
+
+    if ENV == 'script':
         plt.ioff()
-        plt.show(block=True)
+        plt.show(block=True)  # bloquea hasta que el usuario cierre la ventana
+        plt.close(s['fig'])
+    else:
+        # Jupyter/Colab: no tocamos el output ya impreso (es el resultado final
+        # que se quiere ver), solo liberamos memoria y dejamos de "trackear"
+        # la figura para que no sea reusada ni vuelva a renderizarse.
+        plt.close(s['fig'])
+
+    del _figures[fig_id]

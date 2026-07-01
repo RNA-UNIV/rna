@@ -60,25 +60,30 @@ class Perceptron(NeuronaBase):
         ph = 0  # manejador de la recta mientras se dibuja
         errors = 1
         i = 0
-        while ((i < self.epochs) and (errors > 0.0)):
-            errors = 0
-            for xi, target in zip(X, y):
-                update = self.alpha * (target - self.predict(xi))
-                self.w_ += update * xi
-                self.b_ += update
-                errors += int(update != 0.0)
-            self.errors_.append(errors)
+        try:
+            while ((i < self.epochs) and (errors > 0.0)):
+                errors = 0
+                for xi, target in zip(X, y):
+                    update = self.alpha * (target - self.predict(xi))
+                    self.w_ += update * xi
+                    self.b_ += update
+                    errors += int(update != 0.0)
+                self.errors_.append(errors)
 
-            # graficar la recta
-            if (self.draw):
-                ph = dibuPtosRecta(X, y, self.w_, self.b_, self.title, ph)
+                # graficar la recta
+                if (self.draw):
+                    ph = dibuPtosRecta(X, y, self.w_, self.b_, self.title, ph)
 
-            # progreso de entrenamiento
-            if self.verbose:
-                y_pred = self.predict(X)
-                self._show_progress(i, y, y_pred)
+                # progreso de entrenamiento
+                if self.verbose:
+                    y_pred = self.predict(X)
+                    self._show_progress(i, y, y_pred)
 
-            i = i + 1
+                i = i + 1
+
+        finally:
+          if self.draw:
+              waitDibu(ph)
 
         if self.verbose:
             print()  # Salto de línea al finalizar
