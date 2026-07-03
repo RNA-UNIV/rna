@@ -139,7 +139,7 @@ class RNMulticlase(NeuronaBase):
         Calcula la métrica principal del modelo - implementar en subclase
 
         Parameters
-        ----------
+        ----------  
         y_true : array-like
             Valores reales
         y_pred : array-like

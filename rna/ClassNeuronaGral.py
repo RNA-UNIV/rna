@@ -73,6 +73,11 @@ class NeuronaGradiente(NeuronaBase):
 
         self._check_cost_and_activation()
 
+        # Asegura que X e y sean arreglos de NumPy y que y tenga forma (N,)
+        # evitando problemas de broadcasting con vectores columna (N,1).
+        X = np.asarray(X)
+        y = np.asarray(y).ravel()
+
         rgen = np.random.RandomState(self.random_state)
 
         self.w_ = rgen.uniform(-0.5, 0.5, size= X.shape[1])
@@ -92,7 +97,6 @@ class NeuronaGradiente(NeuronaBase):
 
                 for xi, target in zip(X, y):
                     salida = self.predict(xi)
-                    errorXi = (target - salida)
 
                     update = self.alpha * self.deriv_fCosto(target, salida)
 
@@ -101,6 +105,7 @@ class NeuronaGradiente(NeuronaBase):
 
                     ErrorAct += self.fCosto(target, salida)
 
+                ErrorAct /= X.shape[0]
                 self.errors_.append(ErrorAct)
                 self.accuracy_.append(self.accuracy(X, y))
 

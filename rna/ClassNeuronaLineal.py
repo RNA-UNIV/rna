@@ -1,5 +1,5 @@
 from rna.ClassNeuronaBase import NeuronaBase
-
+import numpy as np
 
 class NeuronaLineal(NeuronaBase):
     """
@@ -49,6 +49,10 @@ class NeuronaLineal(NeuronaBase):
         -------
         self : object
         """
+        # Asegura que X e y sean arreglos de NumPy y que y tenga forma (N,)
+        # evitando problemas de broadcasting con vectores columna (N,1).
+        X = np.asarray(X)
+        y = np.asarray(y).ravel()
 
         # graficar la recta
         if (self.draw):

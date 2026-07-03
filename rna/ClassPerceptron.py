@@ -49,6 +49,11 @@ class Perceptron(NeuronaBase):
         self : object
         """
 
+        # Asegura que X e y sean arreglos de NumPy y que y tenga forma (N,)
+        # evitando problemas de broadcasting con vectores columna (N,1).
+        X = np.asarray(X)
+        y = np.asarray(y).ravel()
+
         rgen = np.random.RandomState(self.random_state)
 
         # self.w_ = rgen.normal(loc=0.0, scale=0.01,size=1 + X.shape[1])
