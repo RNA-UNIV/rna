@@ -45,6 +45,10 @@ class DataLoader:
 
         # Lazy (tf.data)
         ds, clases, meta = DataLoader.load_audio_dataset('mi_dataset', fixed_duration=1.0)
+
+        # Ejemplos representativos (curados a mano en el repo, carpeta samples/)
+        X, y, clases, meta = DataLoader.load_samples('fingers')
+        df, meta = DataLoader.load_samples('energy_efficiency')
     """
 
     _resource_dir = 'data'
@@ -63,6 +67,12 @@ class DataLoader:
     # Extensiones soportadas por tipo
     IMAGE_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.bmp', '.gif', '.webp')
     AUDIO_EXTENSIONS = ('.wav', '.mp3', '.ogg', '.flac', '.m4a')
+
+    # Nombre de la carpeta de ejemplos representativos dentro de cada dataset
+    _samples_dir = 'samples'
+
+    # Sufijos de split reconocidos para el fallback de samples/
+    _SPLIT_SUFFIXES = ('_train', '_test')
 
     def __new__(cls, *args, **kwargs):
         if not cls._instance:
@@ -96,6 +106,24 @@ class DataLoader:
             files = response.json()
             return [file['name'] for file in files if file['type'] in filetype]
         return []
+
+    @classmethod
+    def _list_entries(cls, subfolder=''):
+        """
+        Lista el contenido de una carpeta del repo vía API de contents,
+        devolviendo las entradas completas (name, type, etc.) en vez de
+        solo los nombres como hace ``_list_files``.
+
+        Retorna
+        -------
+        entries : list[dict] — entradas tal cual las devuelve la API de
+                  GitHub, o None si la carpeta no existe (404) o hubo error.
+        """
+        url = f"{cls._base_url}/{subfolder}"
+        response = requests.get(url)
+        if response.status_code == 200:
+            return response.json()
+        return None
 
     @classmethod
     def _print_progress(cls, prefix, msg):
@@ -327,6 +355,133 @@ class DataLoader:
             return local_path
 
         raise FileNotFoundError(f"No se encontró el dataset \"{name}\" en el repositorio")
+
+    @classmethod
+    def _strip_split_suffix(cls, name):
+        """
+        Si ``name`` termina en un sufijo de split reconocido (``_train``
+        o ``_test``), devuelve el nombre base sin ese sufijo. Si no
+        termina en ninguno, devuelve None.
+        """
+        for suffix in cls._SPLIT_SUFFIXES:
+            if name.endswith(suffix):
+                return name[:-len(suffix)]
+        return None
+
+    @classmethod
+    def _samples_candidates(cls, name):
+        """
+        Arma la lista ordenada de nombres de dataset donde buscar
+        ``samples/``, aplicando la regla de fallback por split:
+
+        1. El nombre pedido tal cual.
+        2. Si termina en ``_test``: su sibling ``_train`` (se asume que,
+           cuando un dataset tiene versiones ``_train``/``_test``, los
+           ejemplos representativos se curan una sola vez en ``_train``).
+        3. Si termina en ``_train`` o ``_test``: el nombre base sin sufijo
+           (por si los ejemplos están curados en la versión "completa"
+           del dataset, sin split).
+
+        Se prueban en orden y se detiene en el primero que exista; no
+        implica que todos los candidatos existan como datasets reales.
+        """
+        candidates = [name]
+
+        if name.endswith('_test'):
+            sibling_train = name[:-len('_test')] + '_train'
+            if sibling_train not in candidates:
+                candidates.append(sibling_train)
+
+        base = cls._strip_split_suffix(name)
+        if base is not None and base not in candidates:
+            candidates.append(base)
+
+        return candidates
+
+    @classmethod
+    def _require_samples_directory(cls, name, force=False):
+        """
+        Garantiza que la carpeta ``samples/`` del dataset esté disponible
+        localmente, descargándola de forma selectiva vía la API de
+        contents de GitHub (sin disparar la descarga del dataset completo).
+
+        Soporta tanto la variante con subcarpetas por clase (imagen/audio,
+        ej: ``samples/0/``, ``samples/1/``, ...) como la variante de un
+        único archivo suelto (tabular, ej: ``samples/samples.csv``).
+
+        Si el dataset pedido no tiene ``samples/`` propia, se aplica un
+        fallback por convención de nombres (ver ``_samples_candidates``):
+        un dataset ``_test`` busca en su sibling ``_train``, y cualquiera
+        de los dos puede caer al nombre base sin sufijo de split.
+
+        Parámetros
+        ----------
+        name  : nombre canónico del dataset (ya resuelto)
+        force : si True fuerza la descarga aunque ya exista localmente
+
+        Retorna
+        -------
+        local_path : ruta absoluta a la carpeta ``samples/`` local
+                     (cacheada bajo el nombre originalmente pedido, aunque
+                     el contenido remoto provenga de un candidato distinto)
+
+        Raises
+        ------
+        FileNotFoundError : si ninguno de los candidatos tiene carpeta
+                             ``samples/`` en el repositorio
+        """
+        local_path = os.path.join(cls._resource_path, name, cls._samples_dir)
+        sentinel = os.path.join(local_path, '.complete')
+        if not force and os.path.exists(sentinel):
+            return local_path
+
+        candidates = cls._samples_candidates(name)
+        entries = None
+        resolved_name = None
+        for candidate in candidates:
+            entries = cls._list_entries(subfolder=f'{candidate}/{cls._samples_dir}')
+            if entries:
+                resolved_name = candidate
+                break
+
+        if not entries:
+            tried = ', '.join(f'"{c}"' for c in candidates)
+            raise FileNotFoundError(
+                f"No se encontraron ejemplos representativos para \"{name}\" "
+                f"(carpeta 'samples/' no encontrada). Se intentó en: {tried}. "
+                f"Podés usar load_dataframe/load_images/load_audio para acceder "
+                f"al dataset completo mientras tanto."
+            )
+
+        if resolved_name != name:
+            print(f"  usando samples de \"{resolved_name}\" (fallback desde \"{name}\")")
+
+        os.makedirs(local_path, exist_ok=True)
+
+        for entry in entries:
+            if entry['type'] == 'file':
+                cls._download_file(
+                    f"{cls._raw_base_url}/{resolved_name}/{cls._samples_dir}/{entry['name']}",
+                    os.path.join(local_path, entry['name']),
+                    verbose=False
+                )
+            elif entry['type'] == 'dir':
+                class_dir_name = entry['name']
+                class_local_dir = os.path.join(local_path, class_dir_name)
+                os.makedirs(class_local_dir, exist_ok=True)
+                sub_files = cls._list_files(
+                    subfolder=f'{resolved_name}/{cls._samples_dir}/{class_dir_name}',
+                    filetype=['file']
+                )
+                for fname in sub_files:
+                    cls._download_file(
+                        f"{cls._raw_base_url}/{resolved_name}/{cls._samples_dir}/{class_dir_name}/{fname}",
+                        os.path.join(class_local_dir, fname),
+                        verbose=False
+                    )
+
+        open(sentinel, 'w').close()
+        return local_path
 
     # ------------------------------------------------------------------ #
     #  Utilidades de detección                                             #
@@ -1054,6 +1209,178 @@ class DataLoader:
             'fixed_duration': fixed_duration
         }
         return ds, class_names, metadata
+
+    # ------------------------------------------------------------------ #
+    #  API pública — ejemplos representativos (samples/)                  #
+    # ------------------------------------------------------------------ #
+
+    @classmethod
+    def load_samples(cls, name, **kwargs):
+        """
+        Carga los ejemplos representativos pre-curados de un dataset
+        (carpeta ``samples/`` del repositorio), sin descargar el dataset
+        completo.
+
+        El tipo de dataset se determina a partir de ``info.json`` (campo
+        ``'type'``), y la carga se delega en la función correspondiente:
+
+        - ``'image'``            -> misma lógica que ``load_images``
+        - ``'audio'``            -> misma lógica que ``load_audio``
+        - ``'tabular'`` / ``'csv'`` -> misma lógica que ``load_dataframe``
+
+        Acepta nombre canónico o alias. Los ``kwargs`` se pasan tal cual a
+        la carga específica del tipo (ej: ``resize`` para imágenes;
+        ``sample_rate``, ``fixed_duration``, ``mono`` para audio;
+        ``encoding``, ``separator`` para tabular).
+
+        Parámetros
+        ----------
+        name    : nombre del dataset (o alias) en el repositorio
+        kwargs  : parámetros específicos del tipo de dataset
+
+        Retorna
+        -------
+        Para ``'image'``/``'audio'``:
+            X, y, class_names, metadata  — misma forma que ``load_images``/``load_audio``
+        Para ``'tabular'``/``'csv'``:
+            df, metadata  — misma forma que ``load_dataframe``
+
+        Raises
+        ------
+        FileNotFoundError : si el dataset no tiene carpeta ``samples/`` en
+                             el repositorio (todavía no fue curada), o si
+                             ``info.json`` no define el campo ``'type'``
+        ValueError        : si ``info.json`` indica un ``'type'`` no soportado
+        """
+        name = cls._resolve(name)
+        info = cls.dataset_info(name)
+        dtype = info.get('type')
+
+        if not dtype:
+            raise FileNotFoundError(
+                f"El dataset \"{name}\" no tiene definido el campo 'type' en "
+                f"su info.json; no se puede determinar cómo cargar samples/."
+            )
+
+        if dtype == 'image':
+            return cls._load_samples_images(name, **kwargs)
+        elif dtype == 'audio':
+            return cls._load_samples_audio(name, **kwargs)
+        elif dtype in ('tabular', 'csv'):
+            return cls._load_samples_dataframe(name, **kwargs)
+
+        raise ValueError(
+            f"Tipo de dataset no soportado para load_samples: '{dtype}' "
+            f"(dataset \"{name}\")"
+        )
+
+    @classmethod
+    def _load_samples_images(cls, name, resize=None):
+        """
+        Carga los ejemplos representativos de un dataset de imágenes.
+
+        Espera que ``samples/`` tenga la misma estructura que ``data/``
+        (una subcarpeta por clase, con 1-2 ejemplos adentro).
+
+        Retorna
+        -------
+        X, y, class_names, metadata — misma forma que ``load_images``
+        """
+        root_path = cls._require_samples_directory(name)
+        class_names, file_list = cls._scan_classes(root_path, cls.IMAGE_EXTENSIONS)
+        loader_fn = cls._default_image_loader(resize)
+
+        samples, labels = [], []
+        for file_path, label in file_list:
+            samples.append(loader_fn(file_path))
+            labels.append(label)
+
+        metadata = {'color_space': 'rgb', 'resize': resize}
+        return np.array(samples), np.array(labels), class_names, metadata
+
+    @classmethod
+    def _load_samples_audio(cls, name, sample_rate=None, fixed_duration=None, mono=True):
+        """
+        Carga los ejemplos representativos de un dataset de audio.
+
+        Espera que ``samples/`` tenga la misma estructura que ``data/``
+        (una subcarpeta por clase, con 1-2 ejemplos adentro).
+
+        Retorna
+        -------
+        X, y, class_names, metadata — misma forma que ``load_audio``
+        """
+        root_path = cls._require_samples_directory(name)
+        class_names, file_list = cls._scan_classes(root_path, cls.AUDIO_EXTENSIONS)
+
+        if not file_list:
+            raise FileNotFoundError(
+                f"La carpeta 'samples/' del dataset \"{name}\" no contiene "
+                f"archivos de audio."
+            )
+
+        loader_fn = cls._default_audio_loader(
+            sample_rate=sample_rate,
+            fixed_duration=fixed_duration,
+            mono=mono
+        )
+
+        effective_sr = sample_rate
+        if effective_sr is None:
+            effective_sr = librosa.get_samplerate(file_list[0][0])
+            if effective_sr is not None:
+                print(f"  sample_rate detectado: {effective_sr} Hz")
+
+        samples, labels = [], []
+        for file_path, label in file_list:
+            samples.append(loader_fn(file_path))
+            labels.append(label)
+
+        metadata = {
+            'sample_rate': effective_sr,
+            'mono': mono,
+            'fixed_duration': fixed_duration
+        }
+        return np.array(samples), np.array(labels), class_names, metadata
+
+    @classmethod
+    def _load_samples_dataframe(cls, name, encoding=None, separator=None):
+        """
+        Carga los ejemplos representativos de un dataset tabular.
+
+        Espera un único archivo ``samples/samples.csv`` (curado a mano,
+        no necesariamente una muestra aleatoria del dataset completo).
+
+        Retorna
+        -------
+        df, metadata — misma forma que ``load_dataframe``
+
+        Raises
+        ------
+        FileNotFoundError : si ``samples/`` no existe o no contiene
+                             ``samples.csv``
+        """
+        root_path = cls._require_samples_directory(name)
+        file_path = os.path.join(root_path, 'samples.csv')
+
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(
+                f"La carpeta 'samples/' del dataset \"{name}\" no contiene "
+                f"'samples.csv'."
+            )
+
+        if encoding is None:
+            encoding = cls._detect_encoding(file_path)
+        if separator is None:
+            separator = cls._detect_separator(file_path, encoding)
+
+        df = pd.read_csv(file_path,
+                         na_values=['?', ' ', 'NA', 'N/A', 'null', '-', 'unknown', ''],
+                         encoding=encoding,
+                         sep=separator)
+
+        metadata = {'encoding': encoding, 'separator': separator}
+        return df, metadata
 
 
 DataLoader._initialize_class()
