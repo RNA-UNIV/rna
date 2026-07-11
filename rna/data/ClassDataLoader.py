@@ -1222,11 +1222,11 @@ class DataLoader:
         completo.
 
         El tipo de dataset se determina a partir de ``info.json`` (campo
-        ``'type'``), y la carga se delega en la función correspondiente:
+        ``'tipo'``), y la carga se delega en la función correspondiente:
 
-        - ``'image'``            -> misma lógica que ``load_images``
-        - ``'audio'``            -> misma lógica que ``load_audio``
-        - ``'tabular'`` / ``'csv'`` -> misma lógica que ``load_dataframe``
+        - ``'imagen'``  -> misma lógica que ``load_images``
+        - ``'audio'``   -> misma lógica que ``load_audio``
+        - ``'tabular'`` -> misma lógica que ``load_dataframe``
 
         Acepta nombre canónico o alias. Los ``kwargs`` se pasan tal cual a
         la carga específica del tipo (ej: ``resize`` para imágenes;
@@ -1240,33 +1240,33 @@ class DataLoader:
 
         Retorna
         -------
-        Para ``'image'``/``'audio'``:
+        Para ``'imagen'``/``'audio'``:
             X, y, class_names, metadata  — misma forma que ``load_images``/``load_audio``
-        Para ``'tabular'``/``'csv'``:
+        Para ``'tabular'``:
             df, metadata  — misma forma que ``load_dataframe``
 
         Raises
         ------
         FileNotFoundError : si el dataset no tiene carpeta ``samples/`` en
                              el repositorio (todavía no fue curada), o si
-                             ``info.json`` no define el campo ``'type'``
-        ValueError        : si ``info.json`` indica un ``'type'`` no soportado
+                             ``info.json`` no define el campo ``'tipo'``
+        ValueError        : si ``info.json`` indica un ``'tipo'`` no soportado
         """
         name = cls._resolve(name)
         info = cls.dataset_info(name)
-        dtype = info.get('type')
+        dtype = info.get('tipo')
 
         if not dtype:
             raise FileNotFoundError(
-                f"El dataset \"{name}\" no tiene definido el campo 'type' en "
+                f"El dataset \"{name}\" no tiene definido el campo 'tipo' en "
                 f"su info.json; no se puede determinar cómo cargar samples/."
             )
 
-        if dtype == 'image':
+        if dtype == 'imagen':
             return cls._load_samples_images(name, **kwargs)
         elif dtype == 'audio':
             return cls._load_samples_audio(name, **kwargs)
-        elif dtype in ('tabular', 'csv'):
+        elif dtype == 'tabular':
             return cls._load_samples_dataframe(name, **kwargs)
 
         raise ValueError(
