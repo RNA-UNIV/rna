@@ -1,1 +1,1 @@
-from rna.data.ClassDataLoader import DataLoader
+from .ClassDataLoader import DataLoader

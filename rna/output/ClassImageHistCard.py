@@ -3,7 +3,7 @@ import io
 
 import matplotlib.pyplot as plt
 
-from rna.visual.ClassImageCard import ImageCard
+from rna.output.ClassImageCard import ImageCard
 
 
 class ImageHistCard(ImageCard):

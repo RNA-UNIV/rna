@@ -1,2 +1,2 @@
-from ClassEpochTiming import EpochTiming
-from ClassImageVisualizer import ImageVisualizer
+from .ClassEpochTiming import EpochTiming
+from .ClassImageVisualizer import ImageVisualizer

@@ -1,6 +1,6 @@
 from IPython.display import HTML, display
 
-from rna.visual.ClassCardViewer import CardViewer
+from rna.output.ClassCardViewer import CardViewer
 
 
 class GridCardViewer:

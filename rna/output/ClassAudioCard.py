@@ -8,7 +8,7 @@ import soundfile as sf
 
 class AudioCard:
     """
-    Representación visual de un audio.
+    Representación output de un audio.
 
     Proporciona tres secciones HTML:
 

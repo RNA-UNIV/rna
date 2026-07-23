@@ -8,7 +8,7 @@ from matplotlib.colors import hsv_to_rgb
 
 class ImageCard:
     """
-    Representación visual de una imagen.
+    Representación output de una imagen.
 
     Proporciona tres secciones HTML:
 
@@ -240,7 +240,7 @@ class ImageCard:
 
         else:
             # HSL / HSV u otros: canales sin correspondencia
-            # visual directa con RGB, así que uso colores
+            # output directa con RGB, así que uso colores
             # neutros y etiquetas por canal en vez de rojo/
             # verde/azul.
             labels = ("canal 1", "canal 2", "canal 3")
