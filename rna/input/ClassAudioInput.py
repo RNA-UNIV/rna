@@ -6,696 +6,1047 @@ import numpy as np
 from scipy.io import wavfile
 
 audio_html = """
-    <style>
-      .audio-panel {
-        border: 2px dashed #ccc;
-        padding: 16px;
-        border-radius: 4px;
-        background-color: #f9f9f9;
-        font-family: Arial, sans-serif;
-        max-width: 500px;
-      }
+<style>
+  .audio-panel {
+    border: 2px dashed #ccc;
+    padding: 12px;
+    border-radius: 6px;
+    background-color: #f9f9f9;
+    font-family: Arial, sans-serif;
+    max-width: 100%;
+    min-width: 600px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
 
-      .audio-status {
-        text-align: center;
-        font-size: 0.9rem;
-        color: #666;
-        margin-bottom: 12px;
-        min-height: 20px;
-        font-weight: bold;
-      }
+  .audio-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 0 4px;
+  }
 
-      .waveform-container {
-        margin-bottom: 12px;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-        background-color: white;
-        padding: 8px;
-      }
+  .audio-status {
+    font-size: 0.85rem;
+    color: #666;
+    font-weight: bold;
+    white-space: nowrap;
+    min-width: 120px;
+  }
 
-      .waveform-canvas {
-        width: 100%;
-        height: 100px;
-        display: block;
-        cursor: pointer;
-      }
+  .audio-status.timer {
+    color: #d63420;
+  }
 
-      .controls-row {
-        display: flex;
-        gap: 12px;
-        align-items: center;
-        margin-bottom: 12px;
-      }
+  .audio-status.recording {
+    color: #d63420;
+    animation: pulse-text 1s infinite;
+  }
 
-      .volume-control {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-      }
+  @keyframes pulse-text {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
 
-      .volume-slider {
-        width: 100px;
-        height: 6px;
-        cursor: pointer;
-      }
+  .audio-properties {
+    display: flex;
+    gap: 16px;
+    font-size: 0.75rem;
+    color: #888;
+    align-items: center;
+    flex-wrap: wrap;
+  }
 
-      .volume-label {
-        font-size: 0.8rem;
-        color: #666;
-        min-width: 30px;
-      }
+  .audio-properties span {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
 
-      .audio-controls {
-        display: flex;
-        gap: 8px;
-        justify-content: center;
-        flex-wrap: wrap;
-      }
+  .property-value {
+    color: #444;
+    font-weight: 600;
+  }
 
-      .audio-btn {
-        padding: 6px 12px;
-        font-size: 0.85rem;
-        border: none;
-        border-radius: 4px;
-        cursor: pointer;
-        font-weight: bold;
-        transition: opacity 0.2s;
-        height: 32px;
-        display: flex;
-        align-items: center;
-        gap: 6px;
-      }
+  .progress-indicator {
+    font-size: 0.8rem;
+    font-weight: bold;
+    color: #28a745;
+    min-width: 40px;
+    text-align: right;
+  }
 
-      .audio-btn:hover:enabled {
-        opacity: 0.8;
-      }
+  .waveform-container {
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background-color: white;
+    padding: 4px;
+    width: 100%;
+    position: relative;
+  }
 
-      .audio-btn:disabled {
-        cursor: not-allowed;
-        opacity: 0.5;
-      }
+  .waveform-canvas {
+    width: 100%;
+    height: 80px;
+    display: block;
+    cursor: pointer;
+    border-radius: 2px;
+  }
 
-      .btn-record {
-        background-color: #e05a3a;
-        color: white;
-      }
+  /* Línea de tiempo superpuesta */
+  .playhead {
+    position: absolute;
+    top: 4px;
+    bottom: 4px;
+    width: 2px;
+    background-color: #ff0000;
+    pointer-events: none;
+    display: none;
+    z-index: 10;
+    transition: left 0.05s linear;
+  }
 
-      .btn-record.recording {
-        background-color: #d63420;
-        animation: pulse 1s infinite;
-      }
+  .playhead::before {
+    content: '▲';
+    position: absolute;
+    top: -12px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: #ff0000;
+    font-size: 10px;
+  }
 
-      @keyframes pulse {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.7; }
-      }
+  .controls-row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: nowrap;
+  }
 
-      .btn-play {
-        background-color: #1fa3ec;
-        color: white;
-      }
+  .controls-left {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    flex-wrap: nowrap;
+  }
 
-      .btn-accept {
-        background-color: #28a745;
-        color: white;
-      }
+  .controls-right {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    flex-wrap: nowrap;
+  }
 
-      .btn-cancel {
-        background-color: #6c757d;
-        color: white;
-      }
+  .audio-btn {
+    padding: 4px 10px;
+    font-size: 0.75rem;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: all 0.2s;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+  }
 
-      .timer {
-        font-weight: bold;
-        color: #d63420;
-      }
+  .audio-btn:hover:enabled {
+    opacity: 0.8;
+    transform: scale(0.98);
+  }
 
-      .error {
-        color: #d63420;
-      }
-    </style>
+  .audio-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.4;
+  }
 
-    <div class="audio-panel">
-      <div class="audio-status" id="status">Listo para grabar</div>
+  .btn-record {
+    background-color: #e05a3a;
+    color: white;
+    min-width: 70px;
+  }
 
-      <div class="waveform-container">
-        <canvas id="waveform-canvas" class="waveform-canvas"></canvas>
-      </div>
+  .btn-record.recording {
+    background-color: #d63420;
+    animation: pulse-btn 1s infinite;
+  }
 
-      <div class="controls-row">
-        <div class="volume-control">
-          <span>🔊</span>
-          <input type="range" id="volume-slider" class="volume-slider" min="0" max="100" value="80">
-          <span class="volume-label" id="volume-label">80%</span>
-        </div>
-      </div>
+  @keyframes pulse-btn {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+  }
 
-      <div class="audio-controls">
-        <button class="audio-btn btn-record" id="btn-record">🎤 Grabar</button>
-        <button class="audio-btn btn-play" id="btn-play" disabled>▶ Reproducir</button>
-        <button class="audio-btn btn-accept" id="btn-accept" disabled>✓ Aceptar</button>
-        <button class="audio-btn btn-cancel" id="btn-cancel">✕ Cancelar</button>
-      </div>
+  .btn-play {
+    background-color: #1fa3ec;
+    color: white;
+    min-width: 60px;
+  }
+
+  .btn-accept {
+    background-color: #28a745;
+    color: white;
+    min-width: 50px;
+  }
+
+  .btn-cancel {
+    background-color: #6c757d;
+    color: white;
+    min-width: 50px;
+  }
+
+  .btn-export {
+    background-color: #6f42c1;
+    color: white;
+    min-width: 50px;
+  }
+
+  .volume-control {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .volume-slider {
+    width: 60px;
+    height: 4px;
+    cursor: pointer;
+  }
+
+  .volume-label {
+    font-size: 0.7rem;
+    color: #666;
+    min-width: 28px;
+    text-align: center;
+  }
+
+  .error {
+    color: #d63420;
+  }
+
+  .success {
+    color: #28a745;
+  }
+
+  @media (max-width: 768px) {
+    .audio-panel {
+      min-width: auto;
+      padding: 8px;
+    }
+
+    .audio-header {
+      flex-wrap: wrap;
+    }
+
+    .audio-properties {
+      gap: 8px;
+      font-size: 0.7rem;
+    }
+
+    .controls-row {
+      flex-wrap: wrap;
+    }
+
+    .audio-btn {
+      font-size: 0.7rem;
+      padding: 3px 8px;
+      height: 24px;
+    }
+
+    .volume-slider {
+      width: 40px;
+    }
+  }
+</style>
+
+<div class="audio-panel">
+  <!-- FILA 1: Estado + Propiedades -->
+  <div class="audio-header">
+    <div class="audio-status" id="status">✅ Listo</div>
+    <div class="audio-properties">
+      <span>📊 <span class="property-value" id="sample-rate">44.1</span>kHz</span>
+      <span>📁 <span class="property-value" id="file-size">0</span>KB</span>
+      <span>🎚️ <span class="property-value" id="peak-level">-∞</span>dB</span>
+      <span>⏱️ <span class="property-value" id="timer-display">00:00</span></span>
+      <span class="progress-indicator" id="progress">0%</span>
     </div>
+  </div>
 
-    <script>
-    (async function() {
-      const statusEl = document.getElementById('status');
-      const btnRecord = document.getElementById('btn-record');
-      const btnPlay = document.getElementById('btn-play');
-      const btnAccept = document.getElementById('btn-accept');
-      const btnCancel = document.getElementById('btn-cancel');
-      const waveformCanvas = document.getElementById('waveform-canvas');
-      const volumeSlider = document.getElementById('volume-slider');
-      const volumeLabel = document.getElementById('volume-label');
+  <!-- FILA 2: Waveform con línea de tiempo -->
+  <div class="waveform-container">
+    <canvas id="waveform-canvas" class="waveform-canvas"></canvas>
+    <div class="playhead" id="playhead"></div>
+  </div>
 
-      const waveCtx = waveformCanvas.getContext('2d');
-      waveformCanvas.width = waveformCanvas.offsetWidth;
-      waveformCanvas.height = 100;
+  <!-- FILA 3: Controles -->
+  <div class="controls-row">
+    <div class="controls-left">
+      <button class="audio-btn btn-record" id="btn-record">🎤 Grabar</button>
+      <button class="audio-btn btn-play" id="btn-play" disabled>▶ Reproducir</button>
+      <button class="audio-btn btn-accept" id="btn-accept" disabled>✓</button>
+      <button class="audio-btn btn-cancel" id="btn-cancel">✕</button>
+    </div>
+    <div class="controls-right">
+      <div class="volume-control">
+        <span style="font-size:0.75rem;">🎚️ Nivel</span>
+        <input type="range" id="volume-slider" class="volume-slider" min="0" max="100" value="100">
+        <span class="volume-label" id="volume-label">80%</span>
+      </div>
+      <button class="audio-btn btn-export" id="btn-export" disabled>💾</button>
+    </div>
+  </div>
+</div>
 
-      let mediaRecorder;
-      let audioContext;
-      let analyser;
-      let micStream;
-      let audioChunks = [];
-      let audioBlob = null;
-      let audioUrl = null;
-      let audioElement = null;
-      let startTime = 0;
-      let timerInterval = null;
-      let animationId = null;
-      let dataArray = null;
-      let isPlayingBack = false;
-      let cancelled = false;
+<script>
+(async function() {
+  const statusEl = document.getElementById('status');
+  const btnRecord = document.getElementById('btn-record');
+  const btnPlay = document.getElementById('btn-play');
+  const btnAccept = document.getElementById('btn-accept');
+  const btnCancel = document.getElementById('btn-cancel');
+  const btnExport = document.getElementById('btn-export');
+  const waveformCanvas = document.getElementById('waveform-canvas');
+  const volumeSlider = document.getElementById('volume-slider');
+  const volumeLabel = document.getElementById('volume-label');
+  const timerDisplay = document.getElementById('timer-display');
+  const progressDisplay = document.getElementById('progress');
+  const sampleRateDisplay = document.getElementById('sample-rate');
+  const fileSizeDisplay = document.getElementById('file-size');
+  const peakLevelDisplay = document.getElementById('peak-level');
+  const playhead = document.getElementById('playhead');
 
-      function updateStatus(msg, className = '') {
-        statusEl.textContent = msg;
-        statusEl.className = 'audio-status ' + className;
-      }
+  const waveCtx = waveformCanvas.getContext('2d');
 
-      function formatTime(ms) {
-        const seconds = Math.floor(ms / 1000);
-        const mins = Math.floor(seconds / 60);
-        const secs = seconds % 60;
-        return `${mins}:${secs.toString().padStart(2, '0')}`;
-      }
+  function resizeCanvas() {
+    waveformCanvas.width = waveformCanvas.offsetWidth || 800;
+    waveformCanvas.height = 80;
+  }
+  resizeCanvas();
+  window.addEventListener('resize', resizeCanvas);
 
-      function startTimer() {
-        startTime = Date.now();
-        timerInterval = setInterval(() => {
-          const elapsed = Date.now() - startTime;
-          updateStatus(`Grabando... ${formatTime(elapsed)}`, 'timer');
-        }, 100);
-      }
+  let mediaRecorder;
+  let audioContext;
+  let analyser;
+  let micStream;
+  let audioChunks = [];
+  let audioBlob = null;
+  let audioUrl = null;
+  let audioElement = null;
+  let startTime = 0;
+  let timerInterval = null;
+  let animationId = null;
+  let dataArray = null;
+  let isPlayingBack = false;
+  let cancelled = false;
+  let recordingStartTime = 0;
+  let peakLevel = -Infinity;
 
-      function stopTimer() {
-        if (timerInterval) {
-          clearInterval(timerInterval);
-          timerInterval = null;
-        }
-      }
+  // ===== Datos permanentes del audio =====
+  let originalAudioBuffer = null;
 
-      function drawWaveform(data = null) {
-        const width = waveformCanvas.width;
-        const height = waveformCanvas.height;
+  // Waveform (min/max)
+  let waveformData = [];
+  let waveformSamples = 400;
 
-        // Limpiar canvas
-        waveCtx.fillStyle = '#f9f9f9';
-        waveCtx.fillRect(0, 0, width, height);
+  // Nivel final elegido por el usuario (0..1)
+  let outputLevel = 0.80;
 
-        // Línea de referencia en el centro
-        waveCtx.strokeStyle = '#ddd';
+  // Ganancia necesaria para normalizar el audio
+  let normalizationGain = 1.0;
+
+  // Pico original del audio
+  let originalPeak = 0;
+
+  function updateStatus(msg, className = '') {
+    statusEl.textContent = msg;
+    statusEl.className = 'audio-status ' + className;
+  }
+
+  function formatTime(ms) {
+    const totalSeconds = Math.floor(ms / 1000);
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  }
+
+  function updateTimer(ms) {
+    timerDisplay.textContent = formatTime(ms);
+  }
+
+  function updateProgress(percent) {
+    progressDisplay.textContent = Math.round(percent) + '%';
+  }
+
+  function updatePeakLevel(level) {
+    if (level > peakLevel) peakLevel = level;
+    const db = peakLevel > 0 ? 20 * Math.log10(peakLevel) : -Infinity;
+    peakLevelDisplay.textContent = db > -Infinity ? db.toFixed(1) : '-∞';
+  }
+
+  function updateFileSize(bytes) {
+    if (bytes < 1024) {
+      fileSizeDisplay.textContent = bytes + 'B';
+    } else if (bytes < 1024 * 1024) {
+      fileSizeDisplay.textContent = (bytes / 1024).toFixed(1) + 'KB';
+    } else {
+      fileSizeDisplay.textContent = (bytes / (1024 * 1024)).toFixed(2) + 'MB';
+    }
+  }
+
+  function startTimer() {
+    recordingStartTime = Date.now();
+    timerInterval = setInterval(() => {
+      const elapsed = Date.now() - recordingStartTime;
+      updateTimer(elapsed);
+      const maxDuration = 60000;
+      const progress = Math.min((elapsed / maxDuration) * 100, 100);
+      updateProgress(progress);
+      updateStatus('🔴 Grabando...', 'recording');
+    }, 100);
+  }
+
+  function stopTimer() {
+    if (timerInterval) {
+      clearInterval(timerInterval);
+      timerInterval = null;
+    }
+  }
+
+  function drawWaveform(cursorPosition = null) {
+    const w = waveformCanvas.width;
+    const h = waveformCanvas.height;
+    
+    // Fondo
+    waveCtx.clearRect(0, 0, w, h);
+    waveCtx.fillStyle = "#fafafa";
+    waveCtx.fillRect(0, 0, w, h);
+    
+    // Línea central (silencio)
+    const centerY = h / 2;
+    
+    waveCtx.strokeStyle = "#dddddd";
+    waveCtx.lineWidth = 1;
+    waveCtx.beginPath();
+    waveCtx.moveTo(0, centerY);
+    waveCtx.lineTo(w, centerY);
+    waveCtx.stroke();
+    
+    // Verificar si hay datos de waveform
+    if (!waveformData || waveformData.length === 0) {
+        waveCtx.fillStyle = "#888";
+        waveCtx.font = "13px Arial";
+        waveCtx.textAlign = "center";
+        waveCtx.textBaseline = "middle";
+        waveCtx.fillText("🎤 Esperando audio...", w / 2, centerY);
+        return;
+    }
+    
+    const dx = w / waveformData.length;
+    
+    // Dibujar waveform
+    for (let i = 0; i < waveformData.length; i++) {
+        const sample = waveformData[i];
+        const min = sample.min * normalizationGain * outputLevel;
+        const max = sample.max * normalizationGain * outputLevel;
+        const yMin = Math.min(centerY - min * (centerY - 2), h - 2);
+        const yMax = Math.max(centerY - max * (centerY - 2), 2);
+        const x = Math.round(i * dx);
+        
+        waveCtx.strokeStyle = "#1f8ef1";
         waveCtx.lineWidth = 1;
         waveCtx.beginPath();
-        waveCtx.moveTo(0, height / 2);
-        waveCtx.lineTo(width, height / 2);
+        waveCtx.moveTo(x, yMax);
+        waveCtx.lineTo(x, yMin);
         waveCtx.stroke();
-
-        if (!data || data.length === 0) return;
-
-        // Dibujar forma de onda CENTRADA
-        waveCtx.strokeStyle = '#1fa3ec';
+    }
+    
+    // Dibujar cursor de reproducción si se proporciona posición
+    if (cursorPosition !== null && cursorPosition >= 0 && cursorPosition <= 1) {
+        const x = cursorPosition * w;
+        
+        // Actualizar playhead HTML
+        if (playhead) {
+            playhead.style.display = 'block';
+            playhead.style.left = (cursorPosition * 100) + '%';
+        }
+        
+        // Dibujar línea roja en el canvas
+        waveCtx.strokeStyle = "#ff3030";
         waveCtx.lineWidth = 2;
         waveCtx.beginPath();
-
-        const sliceWidth = width / data.length;
-        let x = 0;
-
-        for (let i = 0; i < data.length; i++) {
-          // Normalizar a [-1, 1] desde [0, 255]
-          const v = (data[i] - 128) / 128.0;
-          // Centrar en medio del canvas
-          const y = (height / 2) - (v * (height / 2));
-
-          if (i === 0) {
-            waveCtx.moveTo(x, y);
-          } else {
-            waveCtx.lineTo(x, y);
-          }
-
-          x += sliceWidth;
-        }
-
+        waveCtx.moveTo(x, 0);
+        waveCtx.lineTo(x, h);
         waveCtx.stroke();
+        
+        // Dibujar triángulo en la parte superior
+        waveCtx.fillStyle = "#ff3030";
+        waveCtx.beginPath();
+        waveCtx.moveTo(x, 0);
+        waveCtx.lineTo(x - 6, 10);
+        waveCtx.lineTo(x + 6, 10);
+        waveCtx.closePath();
+        waveCtx.fill();
+    } else {
+        // Ocultar playhead si no hay posición
+        if (playhead) {
+            playhead.style.display = 'none';
+        }
+    }
+  }
+
+  function generateFullWaveform(audioBuffer) {
+
+      if (!audioBuffer)
+          return;
+
+      originalAudioBuffer = audioBuffer;
+
+      const channelData = audioBuffer.getChannelData(0);
+      const totalSamples = channelData.length;
+
+      waveformData = [];
+      originalPeak = 0;
+
+      if (totalSamples === 0) {
+          normalizationGain = 1.0;
+          return;
       }
 
-      function animateWaveform() {
-        if (!analyser) return;
+      const samplesPerBlock = Math.ceil(totalSamples / waveformSamples);
 
-        if (!dataArray) {
-          dataArray = new Uint8Array(analyser.frequencyBinCount);
-        }
+      for (let block = 0; block < waveformSamples; block++) {
 
-        // Usar getByteTimeDomainData() para forma de onda centrada (no espectrograma)
-        analyser.getByteTimeDomainData(dataArray);
-        drawWaveform(dataArray);
+          const start = block * samplesPerBlock;
 
-        if (mediaRecorder.state === 'recording') {
-          animationId = requestAnimationFrame(animateWaveform);
-        }
-      }
+          if (start >= totalSamples)
+              break;
 
-      function animateWaveformPlayback() {
-        if (!analyser || !isPlayingBack) return;
+          const end = Math.min(start + samplesPerBlock, totalSamples);
 
-        if (!dataArray) {
-          dataArray = new Uint8Array(analyser.frequencyBinCount);
-        }
+          let min = Number.POSITIVE_INFINITY;
+          let max = Number.NEGATIVE_INFINITY;
+          let sumSquares = 0;
 
-        // Usar getByteTimeDomainData() para forma de onda centrada
-        analyser.getByteTimeDomainData(dataArray);
-        drawWaveform(dataArray);
+          for (let i = start; i < end; i++) {
 
-        if (isPlayingBack) {
-          animationId = requestAnimationFrame(animateWaveformPlayback);
-        }
-      }
+              const s = channelData[i];
 
-      function updateVolumeLabel() {
-        const volume = volumeSlider.value;
-        volumeLabel.textContent = volume + '%';
-      }
+              if (s < min) min = s;
+              if (s > max) max = s;
 
-      volumeSlider.oninput = () => {
-        updateVolumeLabel();
-        // Asegurar volumen mínimo de 50% para audibilidad
-        const volume = Math.max(0.5, volumeSlider.value / 100);
-        if (audioElement) {
-          audioElement.volume = volume;
-        }
-      };
+              const a = Math.abs(s);
+              if (a > originalPeak)
+                  originalPeak = a;
 
-      // Función para convertir AudioBuffer a WAV válido CON AMPLIFICACIÓN AGRESIVA
-      function audioBufferToWav(audioBuffer) {
-        const numberOfChannels = audioBuffer.numberOfChannels;
-        const sampleRate = audioBuffer.sampleRate;
-        const format = 1; // PCM
-        const bitDepth = 16;
-
-        const bytesPerSample = bitDepth / 8;
-        const blockAlign = numberOfChannels * bytesPerSample;
-
-        // Obtener datos de audio
-        const channelData = [];
-        let maxAmplitude = 0;
-        let sumAmplitude = 0;
-
-        for (let i = 0; i < numberOfChannels; i++) {
-          const channel = audioBuffer.getChannelData(i);
-          channelData.push(channel);
-          // Encontrar amplitud máxima y promedio
-          for (let j = 0; j < channel.length; j++) {
-            const abs = Math.abs(channel[j]);
-            maxAmplitude = Math.max(maxAmplitude, abs);
-            sumAmplitude += abs;
+              sumSquares += s * s;
           }
-        }
 
-        // Calcular RMS promedio
-        const averageAmplitude = sumAmplitude / (audioBuffer.length * numberOfChannels);
-
-        // AMPLIFICACIÓN AGRESIVA
-        // Si el audio es silencioso, amplificar hasta 10x
-        let gain = 1.0;
-        if (maxAmplitude > 0) {
-          if (maxAmplitude < 0.1) {
-            // Audio muy bajo - amplificar hasta 0.9 de la escala
-            gain = 0.9 / maxAmplitude;
-            gain = Math.min(gain, 10.0);  // Máximo 10x amplificación
-          } else if (maxAmplitude < 0.5) {
-            // Audio moderadamente bajo
-            gain = 0.7 / maxAmplitude;
-            gain = Math.min(gain, 5.0);   // Máximo 5x amplificación
-          } else {
-            // Audio normal
-            gain = Math.min(1.0 / maxAmplitude, 1.2);
-          }
-        }
-
-        console.log(`Audio: max=${maxAmplitude.toFixed(4)}, avg=${averageAmplitude.toFixed(4)}, gain=${gain.toFixed(2)}x`);
-
-        const length = audioBuffer.length * numberOfChannels * bytesPerSample;
-        const buffer = new ArrayBuffer(44 + length);
-        const view = new DataView(buffer);
-
-        // Escribir header WAV
-        const writeString = (offset, string) => {
-          for (let i = 0; i < string.length; i++) {
-            view.setUint8(offset + i, string.charCodeAt(i));
-          }
-        };
-
-        writeString(0, 'RIFF');
-        view.setUint32(4, 36 + length, true);
-        writeString(8, 'WAVE');
-        writeString(12, 'fmt ');
-        view.setUint32(16, 16, true);
-        view.setUint16(20, format, true);
-        view.setUint16(22, numberOfChannels, true);
-        view.setUint32(24, sampleRate, true);
-        view.setUint32(28, sampleRate * blockAlign, true);
-        view.setUint16(32, blockAlign, true);
-        view.setUint16(34, bitDepth, true);
-        writeString(36, 'data');
-        view.setUint32(40, length, true);
-
-        // Escribir datos de audio con ganancia y limpieza
-        let offset = 44;
-        let peakAfterGain = 0;
-
-        // PRIMER PASO: Aplicar ganancia
-        const amplifiedSamples = [];
-        for (let i = 0; i < audioBuffer.length; i++) {
-          for (let channel = 0; channel < numberOfChannels; channel++) {
-            let sample = channelData[channel][i] * gain;
-            peakAfterGain = Math.max(peakAfterGain, Math.abs(sample));
-            amplifiedSamples.push(sample);
-          }
-        }
-
-        // SEGUNDO PASO: Re-normalizar si se pasó de 1.0
-        let finalGain = 1.0;
-        if (peakAfterGain > 1.0) {
-          finalGain = 0.95 / peakAfterGain;  // Dejar 5% de margen
-        }
-
-        // TERCER PASO: Escribir con ganancia final
-        for (let i = 0; i < amplifiedSamples.length; i++) {
-          let sample = amplifiedSamples[i] * finalGain;
-          // Clipping suave
-          sample = Math.max(-1, Math.min(1, sample));
-          // Convertir a int16
-          const int16Sample = sample < 0 
-            ? sample * 0x8000 
-            : sample * 0x7FFF;
-          view.setInt16(offset, int16Sample, true);
-          offset += 2;
-        }
-
-        return new Blob([buffer], { type: 'audio/wav' });
+          waveformData.push({
+              min: min,
+              max: max,
+              rms: Math.sqrt(sumSquares / (end - start))
+          });
       }
 
-      // CREAR EL PROMISE ANTES DEL TRY-CATCH
-      // Así siempre existe, incluso si hay error
-      let resolveAudio, rejectAudio;
-      window.audioPromise = new Promise((resolve, reject) => {
-        resolveAudio = resolve;
-        rejectAudio = reject;
-      });
+      normalizationGain =
+          originalPeak > 0 ? 1.0 / originalPeak : 1.0;
+  }
 
-      try {
-        // Solicitar acceso al micrófono
-        micStream = await navigator.mediaDevices.getUserMedia({ 
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: false
-          } 
+  function animateWaveform() {
+    if (!analyser || mediaRecorder.state !== 'recording') {
+        return;
+    }
+    
+    if (!dataArray) {
+        dataArray = new Uint8Array(analyser.frequencyBinCount);
+    }
+    
+    analyser.getByteTimeDomainData(dataArray);
+    
+    // Suavizado: promediar muestras para movimiento más lento
+    const smoothData = new Uint8Array(200);
+    const step = Math.floor(dataArray.length / smoothData.length);
+    
+    for (let i = 0; i < smoothData.length; i++) {
+        let sum = 0;
+        const start = i * step;
+        const end = Math.min(start + step, dataArray.length);
+        for (let j = start; j < end; j++) {
+            sum += dataArray[j];
+        }
+        smoothData[i] = sum / (end - start);
+    }
+    
+    // Dibujar waveform con los datos en vivo (sin cursor de reproducción)
+    drawWaveformFromData(smoothData);
+    
+    // Actualizar nivel de pico
+    let maxVal = 0;
+    for (let i = 0; i < smoothData.length; i++) {
+        const v = Math.abs((smoothData[i] - 128) / 128.0);
+        if (v > maxVal) maxVal = v;
+    }
+    updatePeakLevel(maxVal);
+    
+    if (mediaRecorder.state === 'recording') {
+        setTimeout(() => {
+            animationId = requestAnimationFrame(animateWaveform);
+        }, 66); // ~15 fps
+    }
+  }
+
+  // Función auxiliar para dibujar waveform desde datos en vivo
+  function drawWaveformFromData(data) {
+    const w = waveformCanvas.width;
+    const h = waveformCanvas.height;
+    
+    waveCtx.clearRect(0, 0, w, h);
+    waveCtx.fillStyle = "#fafafa";
+    waveCtx.fillRect(0, 0, w, h);
+    
+    const centerY = h / 2;
+    const dx = w / data.length;
+    
+    waveCtx.strokeStyle = "#1f8ef1";
+    waveCtx.lineWidth = 1;
+    
+    for (let i = 0; i < data.length; i++) {
+        const normalized = (data[i] - 128) / 128.0;
+        const y = centerY - normalized * (centerY - 2);
+        
+        const x = Math.round(i * dx);
+        waveCtx.beginPath();
+        waveCtx.moveTo(x, centerY);
+        waveCtx.lineTo(x, y);
+        waveCtx.stroke();
+    }
+  }
+
+  function animatePlayback() {
+    if (!audioElement || audioElement.paused) {
+        return;
+    }
+    
+    const duration = audioElement.duration;
+    if (!duration || duration <= 0) {
+        return;
+    }
+    
+    const currentTime = audioElement.currentTime;
+    const position = currentTime / duration;
+    
+    // Actualizar tiempo mostrado
+    updateTimer(currentTime * 1000);
+    
+    // Actualizar barra de progreso
+    updateProgress(position * 100);
+    
+    // Redibujar waveform con cursor
+    drawWaveform(position);
+    
+    // Continuar animación
+    if (!audioElement.paused) {
+        requestAnimationFrame(animatePlayback);
+    }
+  }
+
+  function updateVolumeLabel() {
+
+      outputLevel = volumeSlider.value / 100.0;
+
+      volumeLabel.textContent =
+          Math.round(outputLevel * 100) + "%";
+
+      // Redibujar el waveform con el nuevo nivel
+      if (audioElement &&
+          !audioElement.paused &&
+          audioElement.duration > 0) {
+
+          drawWaveform(
+              audioElement.currentTime /
+              audioElement.duration
+          );
+      }
+      else {
+
+          drawWaveform();
+      }
+
+      // Regenerar el WAV que se devolverá a Python
+      if (originalAudioBuffer) {
+
+          audioBlob = audioBufferToWav(originalAudioBuffer);
+
+          if (audioUrl)
+              URL.revokeObjectURL(audioUrl);
+
+          audioUrl = URL.createObjectURL(audioBlob);
+
+          audioElement = new Audio(audioUrl);
+
+          updateFileSize(audioBlob.size);
+      }
+  }
+
+  volumeSlider.oninput = updateVolumeLabel;
+
+  // Función para convertir AudioBuffer a WAV
+  function audioBufferToWav(audioBuffer) {
+
+      const numChannels = audioBuffer.numberOfChannels;
+      const sampleRate = audioBuffer.sampleRate;
+      const numFrames = audioBuffer.length;
+
+      const bytesPerSample = 2;
+      const blockAlign = numChannels * bytesPerSample;
+      const dataSize = numFrames * blockAlign;
+
+      const buffer = new ArrayBuffer(44 + dataSize);
+      const view = new DataView(buffer);
+
+      function writeString(offset, string) {
+          for (let i = 0; i < string.length; i++)
+              view.setUint8(offset + i, string.charCodeAt(i));
+      }
+
+      // =====================
+      // Cabecera WAV
+      // =====================
+
+      writeString(0, "RIFF");
+      view.setUint32(4, 36 + dataSize, true);
+      writeString(8, "WAVE");
+
+      writeString(12, "fmt ");
+      view.setUint32(16, 16, true);
+      view.setUint16(20, 1, true);
+      view.setUint16(22, numChannels, true);
+      view.setUint32(24, sampleRate, true);
+      view.setUint32(28, sampleRate * blockAlign, true);
+      view.setUint16(32, blockAlign, true);
+      view.setUint16(34, 16, true);
+
+      writeString(36, "data");
+      view.setUint32(40, dataSize, true);
+
+      // =====================
+      // Audio
+      // =====================
+
+      const effectiveGain =
+          normalizationGain * outputLevel;
+
+      let offset = 44;
+
+      for (let i = 0; i < numFrames; i++) {
+
+          for (let ch = 0; ch < numChannels; ch++) {
+
+              let sample =
+                  audioBuffer
+                      .getChannelData(ch)[i] *
+                  effectiveGain;
+
+              // limitar por seguridad
+              sample = Math.max(-1, Math.min(1, sample));
+
+              const pcm =
+                  sample < 0
+                      ? sample * 32768
+                      : sample * 32767;
+
+              view.setInt16(offset, pcm, true);
+
+              offset += 2;
+          }
+      }
+
+      return new Blob(
+          [buffer],
+          { type: "audio/wav" }
+      );
+  }
+
+  let resolveAudio, rejectAudio;
+  window.audioPromise = new Promise((resolve, reject) => {
+    resolveAudio = resolve;
+    rejectAudio = reject;
+  });
+
+  try {
+    micStream = await navigator.mediaDevices.getUserMedia({ 
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: false
+      } 
+    });
+
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    analyser = audioContext.createAnalyser();
+    analyser.fftSize = 512; // Más muestras para mejor resolución
+
+    const source = audioContext.createMediaStreamSource(micStream);
+    source.connect(analyser);
+
+    mediaRecorder = new MediaRecorder(micStream);
+
+    btnRecord.onclick = async () => {
+      if (mediaRecorder.state === 'inactive') {
+        cancelled = false;
+        audioChunks = [];
+        audioBlob = null;
+        audioUrl = null;
+        peakLevel = -Infinity;
+        fullWaveformData = null;
+        playhead.style.display = 'none';
+
+        mediaRecorder.start(100);
+        btnRecord.classList.add('recording');
+        btnRecord.textContent = '⏹ Parar';
+        btnPlay.disabled = true;
+        btnAccept.disabled = true;
+        btnExport.disabled = true;
+        btnCancel.disabled = false;
+        startTimer();
+        animateWaveform();
+        updateStatus('🔴 Grabando...', 'recording');
+      } else {
+        mediaRecorder.stop();
+        btnRecord.classList.remove('recording');
+        btnRecord.textContent = '🎤 Grabar';
+        stopTimer();
+        if (animationId) {
+          cancelAnimationFrame(animationId);
+          animationId = null;
+        }
+      }
+    };
+
+    mediaRecorder.ondataavailable = (event) => {
+      audioChunks.push(event.data);
+    };
+
+    mediaRecorder.onstop = () => {
+      if (!cancelled) {
+         drawWaveform(null); // Asegurar que no hay cursor
+      }
+      
+      audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const arrayBuffer = e.target.result;
+        audioContext.decodeAudioData(arrayBuffer, (audioBuffer) => {
+          audioBlob = audioBufferToWav(audioBuffer);
+          audioUrl = URL.createObjectURL(audioBlob);
+          btnPlay.disabled = false;
+          btnAccept.disabled = false;
+          btnExport.disabled = false;
+
+          // Actualizar propiedades
+          sampleRateDisplay.textContent = (audioBuffer.sampleRate / 1000).toFixed(1);
+          updateFileSize(audioBlob.size);
+          updateStatus('✅ Grabación lista', 'success');
+          updateProgress(100);
+
+          // GENERAR WAVEFORM COMPLETO
+          originalAudioBuffer = audioBuffer;
+
+          generateFullWaveform(audioBuffer);
+
+          drawWaveform();
+
+          // Actualizar timer con duración total
+          const durationMs = audioBuffer.length / audioBuffer.sampleRate * 1000;
+          updateTimer(durationMs);
+
+        }, (error) => {
+          updateStatus('❌ Error procesando audio', 'error');
+          console.error('Decode error:', error);
         });
+      };
+      reader.readAsArrayBuffer(audioBlob);
+    };
 
-        // Crear contexto de audio para análisis
-        audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        analyser = audioContext.createAnalyser();
-        analyser.fftSize = 256;
-
-        const source = audioContext.createMediaStreamSource(micStream);
-        source.connect(analyser);
-
-        mediaRecorder = new MediaRecorder(micStream);
-
-        btnRecord.onclick = async () => {
-          if (mediaRecorder.state === 'inactive') {
-            cancelled = false;
-            audioChunks = [];
-            audioBlob = null;
-            audioUrl = null;
-            mediaRecorder.start(100);
-            btnRecord.classList.add('recording');
-            btnRecord.textContent = '⏹ Detener';
-            btnPlay.disabled = true;
-            btnAccept.disabled = true;
-            btnCancel.disabled = false;
-            startTimer();
-            updateStatus('Grabando...', 'timer');
-            animateWaveform();
-          } else {
-            mediaRecorder.stop();
-            btnRecord.classList.remove('recording');
-            btnRecord.textContent = '🎤 Grabar';
-            stopTimer();
-            if (animationId) {
-              cancelAnimationFrame(animationId);
-              animationId = null;
-            }
-          }
-        };
-
-        mediaRecorder.ondataavailable = (event) => {
-          audioChunks.push(event.data);
-        };
-
-        mediaRecorder.onstop = () => {
-          if (cancelled) {
-            resolveAudio(null);
-            return;
-          }
-          audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
-
-          // Decodificar y re-codificar como WAV válido
-          const reader = new FileReader();
-          reader.onload = (e) => {
-            const arrayBuffer = e.target.result;
-            audioContext.decodeAudioData(arrayBuffer, (audioBuffer) => {
-              // Convertir AudioBuffer a WAV
-              audioBlob = audioBufferToWav(audioBuffer);
-              audioUrl = URL.createObjectURL(audioBlob);
-              btnPlay.disabled = false;
-              btnAccept.disabled = false;
-              updateStatus('Grabación completada');
-
-              // Mostrar forma de onda grabada
-              const channelData = audioBuffer.getChannelData(0);
-              const samples = Math.floor(channelData.length / 100);
-              const downsampled = [];
-
-              for (let i = 0; i < 100; i++) {
-                let sum = 0;
-                for (let j = 0; j < samples; j++) {
-                  sum += Math.abs(channelData[i * samples + j]);
-                }
-                downsampled.push((sum / samples) * 128);
-              }
-
-              drawWaveform(downsampled);
-            }, (error) => {
-              updateStatus('Error al procesar audio: ' + error.message);
-              console.error('Decode error:', error);
-            });
-          };
-          reader.readAsArrayBuffer(audioBlob);
-        };
-
-        btnPlay.onclick = () => {
-          if (audioUrl) {
-            if (audioElement && isPlayingBack) {
-              audioElement.pause();
-              isPlayingBack = false;
-              btnPlay.textContent = '▶ Reproducir';
-              updateStatus('Grabación completada');
-              return;
-            }
-
-            audioElement = new Audio(audioUrl);
-            // Volumen: slider a 80% por defecto, permitir hasta 100%
-            const baseVolume = Math.max(0.5, volumeSlider.value / 100);
-            audioElement.volume = baseVolume;
-            audioElement.crossOrigin = "anonymous";
-
-            isPlayingBack = true;
-            btnPlay.textContent = '⏸ Pausar';
-
-            audioElement.play().catch(err => {
-              console.error('Error al reproducir:', err);
-              updateStatus('Error: No se pudo reproducir el audio');
-              isPlayingBack = false;
-              btnPlay.textContent = '▶ Reproducir';
-            });
-
-            updateStatus('Reproduciendo...');
-
-            // NUEVO: Animar forma de onda durante reproducción
-            animateWaveformPlayback();
-
-            audioElement.onended = () => {
-              isPlayingBack = false;
-              btnPlay.textContent = '▶ Reproducir';
-              updateStatus('Grabación completada');
-              drawWaveform();
-            };
-
-            audioElement.onerror = (error) => {
-              console.error('Error de audio:', error);
-              updateStatus('Error: No se pudo reproducir');
-              isPlayingBack = false;
-              btnPlay.textContent = '▶ Reproducir';
-            };
-          }
-        };
-
-        btnCancel.onclick = () => {
-
-            cancelled = true;
-            btnRecord.disabled = true;
-            btnPlay.disabled = true;
-            btnAccept.disabled = true;
-            btnCancel.disabled = true;
-
-            if (mediaRecorder.state === 'recording') {
-                mediaRecorder.stop();
-
-                btnRecord.classList.remove('recording');
-                btnRecord.textContent = '🎤 Grabar';
-
-                stopTimer();
-
-                if (animationId) {
-                    cancelAnimationFrame(animationId);
-                    animationId = null;
-                }
-
-                // onstop resolverá el Promise
-                return;
-            }
-
-            if (audioElement && isPlayingBack) {
-                audioElement.pause();
-                isPlayingBack = false;
-            }
-
-            if (audioUrl) {
-                URL.revokeObjectURL(audioUrl);
-            }
-
-            audioChunks = [];
-            audioBlob = null;
-            audioUrl = null;
-            audioElement = null;
-
-            btnPlay.disabled = true;
-            btnAccept.disabled = true;
+    btnPlay.onclick = () => {
+      if (audioUrl) {
+        if (audioElement && isPlayingBack) {
+            audioElement.pause();
+            isPlayingBack = false;
             btnPlay.textContent = '▶ Reproducir';
-
-            drawWaveform();
-            updateStatus('Cancelado');
-
-            resolveAudio(null);
+            drawWaveform(null); // Pasar null para ocultar cursor
+            updateStatus('✅ Grabación lista', 'success');
+            return;
+        }
+        
+        audioElement = new Audio(audioUrl);
+        audioElement.volume = volumeSlider.value / 100;
+        audioElement.crossOrigin = "anonymous";
+        
+        isPlayingBack = true;
+        btnPlay.textContent = '⏸ Pausar';
+        
+        audioElement.play().catch(err => {
+            console.error('Error al reproducir:', err);
+            updateStatus('❌ Error reproduciendo', 'error');
+            isPlayingBack = false;
+            btnPlay.textContent = '▶ Reproducir';
+            drawWaveform(null);
+        });
+        
+        updateStatus('▶️ Reproduciendo...', 'timer');
+        
+        // Iniciar animación de reproducción
+        animatePlayback();
+        
+        audioElement.onended = () => {
+            isPlayingBack = false;
+            btnPlay.textContent = '▶ Reproducir';
+            drawWaveform(null);
+            updateStatus('✅ Grabación lista', 'success');
+            updateTimer(audioElement.duration * 1000);
         };
-
-        // Variable global que almacena el audio
-        window.audioData = null;
-        window.audioReady = false;
-
-        btnAccept.onclick = async () => {
-          if (audioBlob) {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-              const base64 = e.target.result.split(',')[1];
-              window.audioData = base64;
-              window.audioReady = true;
-              resolveAudio(base64);  // Resolver el promise
-              btnRecord.disabled = true;
-              btnPlay.disabled = true;
-              btnAccept.disabled = true;
-              btnCancel.disabled = true;
-              updateStatus('Audio aceptado ✓');
-            };
-            reader.readAsDataURL(audioBlob);
-          }
+        
+        audioElement.onerror = (error) => {
+            console.error('Error de audio:', error);
+            updateStatus('❌ Error reproduciendo', 'error');
+            isPlayingBack = false;
+            btnPlay.textContent = '▶ Reproducir';
+            drawWaveform(null);
         };
-
-      } catch (error) {
-        updateStatus('Error: No se pudo acceder al micrófono', 'error');
-        btnRecord.disabled = true;
-        rejectAudio(error);  // Rechazar el promise con el error
-        console.error('Error:', error);
       }
-    })();
-    </script>
-    """
+    };
+
+    btnCancel.onclick = () => {
+      cancelled = true;
+      btnRecord.disabled = true;
+      btnPlay.disabled = true;
+      btnAccept.disabled = true;
+      btnExport.disabled = true;
+      btnCancel.disabled = true;
+
+      if (mediaRecorder.state === 'recording') {
+        mediaRecorder.stop();
+        btnRecord.classList.remove('recording');
+        btnRecord.textContent = '🎤 Grabar';
+        stopTimer();
+        if (animationId) {
+          cancelAnimationFrame(animationId);
+          animationId = null;
+        }
+        return;
+      }
+
+      if (audioElement && isPlayingBack) {
+        audioElement.pause();
+        isPlayingBack = false;
+      }
+
+      if (audioUrl) {
+        URL.revokeObjectURL(audioUrl);
+      }
+
+      audioChunks = [];
+      audioBlob = null;
+      audioUrl = null;
+      audioElement = null;
+
+      waveformData = [];
+      originalAudioBuffer = null;
+
+      playhead.style.display = 'none';
+
+      btnPlay.disabled = true;
+      btnAccept.disabled = true;
+      btnExport.disabled = true;
+      btnPlay.textContent = '▶ Reproducir';
+      btnRecord.disabled = false;
+      btnCancel.disabled = false;
+
+      drawWaveform();
+      updateStatus('❌ Cancelado', 'error');
+      updateTimer(0);
+      updateProgress(0);
+      peakLevelDisplay.textContent = '-∞';
+      fileSizeDisplay.textContent = '0KB';
+
+      resolveAudio(null);
+    };
+
+    btnExport.onclick = () => {
+      if (audioBlob) {
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(audioBlob);
+        link.download = `recording_${new Date().toISOString().slice(0,19).replace(/:/g, '-')}.wav`;
+        link.click();
+        updateStatus('💾 Archivo descargado', 'success');
+      }
+    };
+
+    btnAccept.onclick = async () => {
+      if (audioBlob) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const base64 = e.target.result.split(',')[1];
+          window.audioData = base64;
+          window.audioReady = true;
+          resolveAudio(base64);
+          btnRecord.disabled = true;
+          btnPlay.disabled = true;
+          btnAccept.disabled = true;
+          btnCancel.disabled = true;
+          btnExport.disabled = true;
+          updateStatus('✅ Audio aceptado ✓', 'success');
+        };
+        reader.readAsDataURL(audioBlob);
+      }
+    };
+
+  } catch (error) {
+    updateStatus('❌ Error: Sin acceso al micrófono', 'error');
+    btnRecord.disabled = true;
+    rejectAudio(error);
+    console.error('Error:', error);
+  }
+})();
+</script>
+"""
 
 
 class AudioInput(object):
     """
     Panel interactivo para grabar audio en Google Colab.
-
-    Uso:
-        panel = AudioPanel()
-        audio_array = panel.record(duration=5)
-        # o
-        filename = panel.record_to_file('mi_audio.wav', duration=5)
+    Versión con waveform completo y línea de tiempo.
     """
 
     def record(self, duration=None, sample_rate=16000):
         """
         Graba audio con interfaz interactiva.
 
-        Args:
-            duration: Duración máxima en segundos (opcional, sin límite si es None)
-            sample_rate: Frecuencia de muestreo en Hz (default: 16000)
-
         Returns:
             tuple: (audio_array, sample_rate)
-                - audio_array: numpy.ndarray de audio (mono) con valores en rango [-1, 1]
-                - sample_rate: Frecuencia de muestreo en Hz
         """
         display(HTML(audio_html))
-
-        # Obtener el audio codificado en base64
-        # Esperar a que el usuario presione "Aceptar"
         base64_audio = eval_js("audioPromise")
 
         if base64_audio is None:
             return None, None
 
-        # Decodificar
         audio_binary = b64decode(base64_audio)
-
-        # Guardar temporalmente y cargar con scipy
         temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.wav')
         temp_file.write(audio_binary)
         temp_file.close()
 
         try:
             sr, audio_data = wavfile.read(temp_file.name)
-
-            # Convertir a mono si es estéreo
             if len(audio_data.shape) > 1:
                 audio_data = audio_data.mean(axis=1)
-
-            # Normalizar a rango [-1, 1]
             audio_data = audio_data.astype(np.float32) / np.iinfo(np.int16).max
-
-            # Retornar audio Y sample_rate
             return audio_data, sr
         finally:
             import os
@@ -704,55 +1055,25 @@ class AudioInput(object):
     def record_to_file(self, filename='recording.wav', duration=None, sample_rate=16000):
         """
         Graba audio y lo guarda en un archivo.
-
-        Args:
-            filename: Nombre del archivo (default: 'recording.wav')
-            duration: Duración máxima en segundos (opcional)
-            sample_rate: Frecuencia de muestreo en Hz (default: 16000)
-
-        Returns:
-            tuple: (filepath, sample_rate)
-                - filepath: Ruta completa del archivo guardado
-                - sample_rate: Frecuencia de muestreo en Hz del archivo guardado
         """
         display(HTML(audio_html))
-
-        # Obtener el audio
         base64_audio = eval_js("audioPromise")
 
         if base64_audio is None:
             return None, None
 
         audio_binary = b64decode(base64_audio)
-
-        # Guardar en archivo
         output_dir = tempfile.mkdtemp()
         output_path = f"{output_dir}/{filename}"
 
         with open(output_path, 'wb') as f:
             f.write(audio_binary)
 
-        # Leer para obtener el sample_rate
         sr, _ = wavfile.read(output_path)
-
         return output_path, sr
 
     def record_with_preview(self, duration=None, sample_rate=16000):
         """
         Graba audio y retorna el array de audio y sample_rate.
-
-        El "preview" se refiere a la visualización en tiempo real de la forma de onda
-        que aparece en el canvas mientras grabas.
-
-        Args:
-            duration: Duración máxima en segundos (opcional)
-            sample_rate: Frecuencia de muestreo en Hz (default: 16000)
-
-        Returns:
-            tuple: (audio_array, sample_rate)
-                - audio_array: numpy.ndarray con los datos de audio
-                - sample_rate: Frecuencia de muestreo en Hz
         """
-        # Simplemente llama a record()
-        # El "preview" es la visualización en canvas, no un widget de retorno
         return self.record(duration=duration, sample_rate=sample_rate)
