@@ -81,9 +81,9 @@ class DataLoader:
             cls._create_directories()
         return cls._instance
 
-    # ------------------------------------------------------------------ #
-    #  Infraestructura interna                                             #
-    # ------------------------------------------------------------------ #
+    # ================================================================
+    #  Infraestructura interna
+    # ================================================================
 
     @classmethod
     def _initialize_class(cls):
@@ -229,9 +229,9 @@ class DataLoader:
 
         os.remove(zip_path)
 
-    # ------------------------------------------------------------------ #
-    #  Alias de datasets                                                   #
-    # ------------------------------------------------------------------ #
+    # ================================================================
+    #  Alias de datasets
+    # ================================================================
 
     @staticmethod
     def _normalize(name):
@@ -483,9 +483,9 @@ class DataLoader:
         open(sentinel, 'w').close()
         return local_path
 
-    # ------------------------------------------------------------------ #
-    #  Utilidades de detección                                             #
-    # ------------------------------------------------------------------ #
+    # ================================================================
+    #  Utilidades de detección
+    # ================================================================
 
     @classmethod
     def _detect_encoding(cls, file_path):
@@ -563,9 +563,9 @@ class DataLoader:
 
         return subdirs, file_list
 
-    # ------------------------------------------------------------------ #
-    #  API pública — tabular                                               #
-    # ------------------------------------------------------------------ #
+    # ================================================================
+    #  API pública — tabular
+    # ================================================================
 
     @classmethod
     def list_datasets(cls):
@@ -598,6 +598,30 @@ class DataLoader:
         str — ruta absoluta al directorio local del dataset
         """
         return cls._require_repo_directory(name)
+
+    @classmethod
+    def download_dataset(cls, name, force=False):
+        """
+        Descarga un dataset y retorna su ruta local.
+
+        Acepta nombre canónico o alias. Descarga automáticamente la
+        primera vez; en llamadas posteriores reutiliza lo ya descargado
+        a menos que se especifique ``force=True``.
+
+        Parámetros
+        ----------
+        name  : nombre del dataset (o alias)
+        force : si True fuerza re-descarga aunque ya exista
+
+        Retorna
+        -------
+        str — ruta absoluta al directorio local del dataset
+
+        Raises
+        ------
+        FileNotFoundError : si el dataset no se encuentra en el repositorio
+        """
+        return cls._require_repo_directory(name, force=force)
 
     @classmethod
     def dataset_info(cls, name, force=False):
@@ -780,9 +804,9 @@ class DataLoader:
             return (*result, metadata)
         return result
 
-    # ------------------------------------------------------------------ #
-    #  API pública — archivos (imágenes, audio, genérico)                 #
-    # ------------------------------------------------------------------ #
+    # ================================================================
+    #  API pública — archivos (imágenes, audio, genérico)
+    # ================================================================
 
     @classmethod
     def load_files(cls, name, extensions, loader_fn):
@@ -890,9 +914,9 @@ class DataLoader:
 
         return ds, class_names
 
-    # ------------------------------------------------------------------ #
-    #  Shortcuts para imágenes                                             #
-    # ------------------------------------------------------------------ #
+    # ================================================================
+    #  Shortcuts para imágenes
+    # ================================================================
 
     @classmethod
     def _default_image_loader(cls, resize=None):
@@ -992,9 +1016,9 @@ class DataLoader:
         metadata = {'color_space': 'rgb', 'resize': resize}
         return ds, class_names, metadata
 
-    # ------------------------------------------------------------------ #
-    #  Shortcuts para audio                                                #
-    # ------------------------------------------------------------------ #
+    # ================================================================
+    #  Shortcuts para audio
+    # ================================================================
 
     @classmethod
     def _default_audio_loader(cls, sample_rate=None, fixed_duration=None, mono=True):
@@ -1210,9 +1234,9 @@ class DataLoader:
         }
         return ds, class_names, metadata
 
-    # ------------------------------------------------------------------ #
-    #  API pública — ejemplos representativos (samples/)                  #
-    # ------------------------------------------------------------------ #
+    # ================================================================
+    #  API pública — ejemplos representativos (samples/)
+    # ================================================================
 
     @classmethod
     def load_samples(cls, name, **kwargs):
