@@ -1,0 +1,6 @@
+requests
+pandas
+pillow
+chardet
+numpy
+librosa

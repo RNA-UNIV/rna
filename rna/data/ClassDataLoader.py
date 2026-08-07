@@ -919,6 +919,25 @@ class DataLoader:
     # ================================================================
 
     @classmethod
+    def _detect_image_shape(cls, name, loader_fn):
+        """
+        Detecta el shape cargando solo la primera imagen encontrada.
+        """
+        local_path = cls._require_repo_directory(name)
+        root_path = cls._find_data_path(local_path)
+
+        # Encontrar primera imagen sin listar todo
+        for subdir in sorted(os.listdir(root_path)):
+            subdir_path = os.path.join(root_path, subdir)
+            if os.path.isdir(subdir_path):
+                for fname in sorted(os.listdir(subdir_path)):
+                    if fname.lower().endswith(cls.IMAGE_EXTENSIONS):
+                        first_image_path = os.path.join(subdir_path, fname)
+                        return loader_fn(first_image_path).shape
+
+        return None
+
+    @classmethod
     def _default_image_loader(cls, resize=None):
         """
         Devuelve una ``loader_fn`` para imágenes.
@@ -1003,7 +1022,8 @@ class DataLoader:
         """
         sample_shape = None
         if resize is not None:
-            sample_shape = (resize[1], resize[0], 1)
+            shape = cls._detect_image_shape(name, cls._default_image_loader(resize))
+            sample_shape = shape if shape else None
 
         ds, class_names = cls.load_files_dataset(
             name,
@@ -1013,7 +1033,20 @@ class DataLoader:
             shuffle=shuffle,
             random_state=random_state
         )
-        metadata = {'color_space': 'rgb', 'resize': resize}
+
+        if sample_shape:
+            c = sample_shape[2]
+            if c == 1:
+                color_space = 'grayscale'
+            elif c == 3:
+                color_space = 'rgb'
+            elif c == 4:
+                color_space = 'rgba'
+            else:
+                color_space = f'multichannel_{c}'
+
+        metadata = {'color_space': color_space, 'resize': resize}
+
         return ds, class_names, metadata
 
     # ================================================================
