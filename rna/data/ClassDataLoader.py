@@ -921,7 +921,17 @@ class DataLoader:
     @classmethod
     def _detect_image_shape(cls, name, loader_fn):
         """
-        Detecta el shape cargando solo la primera imagen encontrada.
+        Detecta el shape (H, W, C) cargando solo la primera imagen encontrada.
+
+        Parámetros
+        ----------
+        name      : nombre canónico del dataset (ya resuelto)
+        loader_fn : función loader_fn(file_path) que retorna np.ndarray
+
+        Retorna
+        -------
+        tuple(int, int, int) — (H, W, C) de la primera imagen, o None si
+                                no hay imágenes
         """
         local_path = cls._require_repo_directory(name)
         root_path = cls._find_data_path(local_path)
@@ -936,6 +946,30 @@ class DataLoader:
                         return loader_fn(first_image_path).shape
 
         return None
+
+    @classmethod
+    def _detect_color_space(cls, num_channels):
+        """
+        Retorna la etiqueta de color_space según el número de canales.
+
+        Parámetros
+        ----------
+        num_channels : int — número de canales de la imagen
+
+        Retorna
+        -------
+        str — ``'grayscale'``, ``'rgb'``, ``'rgba'``, ``'multichannel_N'``, o ``'unknown'``
+        """
+        if num_channels == 1:
+            return 'grayscale'
+        elif num_channels == 3:
+            return 'rgb'
+        elif num_channels == 4:
+            return 'rgba'
+        elif num_channels is not None:
+            return f'multichannel_{num_channels}'
+        else:
+            return 'unknown'
 
     @classmethod
     def _default_image_loader(cls, resize=None):
@@ -985,7 +1019,8 @@ class DataLoader:
         class_names : list[str]
         metadata    : dict con claves:
 
-                      - ``'color_space'``: ``'rgb'`` (valor fijo actual)
+                      - ``'color_space'``: ``'grayscale'``, ``'rgb'``, ``'rgba'``,
+                        o ``'multichannel_N'``
                       - ``'resize'``: valor del parámetro ``resize``
         """
         X, y, class_names = cls.load_files(
@@ -993,8 +1028,13 @@ class DataLoader:
             cls.IMAGE_EXTENSIONS,
             cls._default_image_loader(resize)
         )
-        metadata = {'color_space': 'rgb', 'resize': resize}
+        if X.size > 0:
+            color_space = cls._detect_color_space(X.shape[3])
+        else:
+            color_space = cls._detect_color_space(None)
+        metadata = {'color_space': color_space, 'resize': resize}
         return X, y, class_names, metadata
+
 
     @classmethod
     def load_images_dataset(cls, name, resize=None, shuffle=False, random_state=None):
@@ -1017,36 +1057,32 @@ class DataLoader:
         class_names : list[str]
         metadata    : dict con claves:
 
-                      - ``'color_space'``: ``'rgb'``
+                      - ``'color_space'``: ``'grayscale'``, ``'rgb'``, ``'rgba'``,
+                        o ``'multichannel_N'``
                       - ``'resize'``: valor del parámetro ``resize``
         """
-        sample_shape = None
-        if resize is not None:
-            shape = cls._detect_image_shape(name, cls._default_image_loader(resize))
-            sample_shape = shape if shape else None
+        # Crear loader con resize si está especificado
+        loader_fn = cls._default_image_loader(resize)
 
+        # Detectar shape real (incluyendo canales) de la primera imagen
+        sample_shape = cls._detect_image_shape(name, loader_fn)
+
+        if sample_shape:
+            color_space = cls._detect_color_space(sample_shape[2])
+        else:
+            color_space = cls._detect_color_space(None)
+
+        # Crear el dataset lazy
         ds, class_names = cls.load_files_dataset(
             name,
             cls.IMAGE_EXTENSIONS,
-            cls._default_image_loader(resize),
+            loader_fn,
             sample_shape=sample_shape,
             shuffle=shuffle,
             random_state=random_state
         )
 
-        if sample_shape:
-            c = sample_shape[2]
-            if c == 1:
-                color_space = 'grayscale'
-            elif c == 3:
-                color_space = 'rgb'
-            elif c == 4:
-                color_space = 'rgba'
-            else:
-                color_space = f'multichannel_{c}'
-
         metadata = {'color_space': color_space, 'resize': resize}
-
         return ds, class_names, metadata
 
     # ================================================================
