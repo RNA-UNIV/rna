@@ -778,7 +778,7 @@ class DataLoader:
         console = Console()
         table = Table(title='Dataset Info', show_header=True, header_style='bold cyan')
         table.add_column('Campo', style='bold cyan', width=40, no_wrap=True)
-        table.add_column('Valor', style='white', ratio=1)
+        table.add_column('Valor', style='dark gray', ratio=1)
 
         def add_rows(d, prefix=''):
             for k, v in d.items():
@@ -812,6 +812,7 @@ class DataLoader:
         tree = Tree('[bold blue]Dataset Info[/bold blue]')
 
         def add_tree(node, d):
+            fclr = 'dark_gray'
             for k, v in d.items():
                 if isinstance(v, dict):
                     branch = node.add(f'[bold cyan]{k}[/bold cyan]')
@@ -824,10 +825,10 @@ class DataLoader:
                             add_tree(sub, item)
                     else:
                         vals = ', '.join(str(x) for x in v)
-                        node.add(f'[bold cyan]{k}[/bold cyan]: [white]{vals}[/white]')
+                        node.add(f'[bold cyan]{k}[/bold cyan]: [{fclr}]{vals}[/{fclr}]')
                 else:
                     val = str(v) if v is not None else '[dim]null[/dim]'
-                    node.add(f'[bold cyan]{k}[/bold cyan]: [white]{val}[/white]')
+                    node.add(f'[bold cyan]{k}[/bold cyan]: [{fclr}]{val}[/{fclr}]')
 
         add_tree(tree, info)
         console.print(tree)
