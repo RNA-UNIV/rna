@@ -778,7 +778,7 @@ class DataLoader:
         console = Console()
         table = Table(title='Dataset Info', show_header=True, header_style='bold cyan')
         table.add_column('Campo', style='bold cyan', width=40, no_wrap=True)
-        table.add_column('Valor', style='dark gray', ratio=1)
+        table.add_column('Valor', style='grey30', ratio=1)
 
         def add_rows(d, prefix=''):
             for k, v in d.items():
