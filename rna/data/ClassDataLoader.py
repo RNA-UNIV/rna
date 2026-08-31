@@ -661,28 +661,186 @@ class DataLoader:
             return json.load(f)
 
     @classmethod
-    def dataset_info_display(cls, name, force=False):
+    def dataset_info_display(cls, name, force=False, format='tree'):
         """
-        Muestra el ``info.json`` del dataset de forma legible.
-
-        En entornos Jupyter/Colab usa ``IPython.display.JSON`` para
-        renderizado interactivo; en otros entornos imprime JSON indentado.
+        Muestra el ``info.json`` del dataset en formato legible.
 
         Parámetros
         ----------
-        name  : nombre del dataset (o alias)
-        force : si True fuerza la descarga del ``info.json``
+        name   : nombre del dataset (o alias)
+        force  : si True fuerza la descarga del ``info.json``
+        format : formato de salida. Opciones:
+                 - 'simple'      : clave-valor con indentación (sin dependencias)
+                 - 'tabulate'    : tabla alineada (requiere ``tabulate``)
+                 - 'table'  : tabla con colores y bordes (requiere ``rich``)
+                 - 'tree'   : árbol jerárquico con colores (requiere ``rich``) [default]
+                 - 'yaml'        : formato YAML (requiere ``PyYAML``)
+
+        En entornos Jupyter/Colab, si ``format='auto'`` (default anterior),
+        usa ``IPython.display.JSON`` para renderizado interactivo.
         """
         info_data = cls.dataset_info(name, force)
+
+        # Auto-detect Jupyter para compatibilidad hacia atrás
+        if format == 'auto':
+            try:
+                from IPython import get_ipython
+                from IPython.display import display, JSON
+                if get_ipython() is not None:
+                    display(JSON(info_data, root=cls._resolve(name)))
+                    return
+            except (ImportError, RuntimeError):
+                format = 'simple'
+
+        format = format.lower()
+        if format == 'simple':
+            cls._display_simple(info_data)
+        elif format == 'tabulate':
+            cls._display_tabulate(info_data)
+        elif format == 'table':
+            cls._display_rich_table(info_data)
+        elif format == 'tree':
+            cls._display_rich_tree(info_data)
+        elif format == 'yaml':
+            cls._display_yaml(info_data)
+        else:
+            raise ValueError(
+                f"Formato '{format}' no soportado. "
+                f"Opciones: 'simple', 'tabulate', 'table', 'tree', 'yaml', 'auto'"
+            )
+
+    @staticmethod
+    def _display_simple(info, indent=0):
+        """Formato clave-valor simple con indentación (sin dependencias)."""
+        def fmt_val(v):
+            if v is None:
+                return 'null'
+            if isinstance(v, bool):
+                return 'true' if v else 'false'
+            return str(v)
+
+        def _print(d, level=0):
+            prefix = '  ' * level
+            for k, v in d.items():
+                if isinstance(v, dict):
+                    print(f"{prefix}{k}:")
+                    _print(v, level + 1)
+                elif isinstance(v, list):
+                    if v and isinstance(v[0], dict):
+                        print(f"{prefix}{k}:")
+                        for i, item in enumerate(v):
+                            print(f"{prefix}  [{i}]")
+                            _print(item, level + 2)
+                    else:
+                        vals = ', '.join(fmt_val(x) for x in v)
+                        print(f"{prefix}{k}: [{vals}]")
+                else:
+                    print(f"{prefix}{k}: {fmt_val(v)}")
+
+        _print(info)
+
+    @staticmethod
+    def _display_tabulate(info):
+        """Tabla alineada usando tabulate."""
         try:
-            from IPython import get_ipython
-            from IPython.display import display, JSON
-            if get_ipython() is not None:
-                display(JSON(info_data, root=cls._resolve(name)))
-            else:
-                raise RuntimeError
-        except (ImportError, RuntimeError):
-            print(json.dumps(info_data, indent=2, ensure_ascii=False))
+            from tabulate import tabulate
+        except ImportError:
+            raise ImportError("Instala 'tabulate': pip install tabulate")
+
+        rows = []
+        def flatten(d, prefix=''):
+            for k, v in d.items():
+                key = prefix + k
+                if isinstance(v, dict):
+                    flatten(v, key + '.')
+                elif isinstance(v, list):
+                    if v and isinstance(v[0], dict):
+                        for i, item in enumerate(v):
+                            flatten(item, key + f'[{i}].')
+                    else:
+                        vals = ', '.join(str(x) for x in v)
+                        rows.append((key, vals))
+                else:
+                    rows.append((key, v if v is not None else 'null'))
+
+        flatten(info)
+        print(tabulate(rows, headers=['Campo', 'Valor'], tablefmt='simple'))
+
+    @staticmethod
+    def _display_rich_table(info):
+        """Tabla con colores usando rich."""
+        try:
+            from rich.console import Console
+            from rich.table import Table
+        except ImportError:
+            raise ImportError("Instala 'rich': pip install rich")
+
+        console = Console()
+        table = Table(title='Dataset Info', show_header=True, header_style='bold cyan')
+        table.add_column('Campo', style='bold cyan', width=40, no_wrap=True)
+        table.add_column('Valor', style='white', ratio=1)
+
+        def add_rows(d, prefix=''):
+            for k, v in d.items():
+                key = prefix + k
+                if isinstance(v, dict):
+                    add_rows(v, key + '.')
+                elif isinstance(v, list):
+                    if v and isinstance(v[0], dict):
+                        for i, item in enumerate(v):
+                            add_rows(item, key + f'[{i}].')
+                    else:
+                        vals = ', '.join(str(x) for x in v)
+                        table.add_row(key, vals)
+                else:
+                    val = str(v) if v is not None else '[dim]null[/dim]'
+                    table.add_row(key, val)
+
+        add_rows(info)
+        console.print(table)
+
+    @staticmethod
+    def _display_rich_tree(info):
+        """Árbol jerárquico con colores usando rich."""
+        try:
+            from rich.console import Console
+            from rich.tree import Tree
+        except ImportError:
+            raise ImportError("Instala 'rich': pip install rich")
+
+        console = Console()
+        tree = Tree('[bold blue]Dataset Info[/bold blue]')
+
+        def add_tree(node, d):
+            for k, v in d.items():
+                if isinstance(v, dict):
+                    branch = node.add(f'[bold cyan]{k}[/bold cyan]')
+                    add_tree(branch, v)
+                elif isinstance(v, list):
+                    if v and isinstance(v[0], dict):
+                        branch = node.add(f'[bold cyan]{k}[/bold cyan] [dim](lista)[/dim]')
+                        for i, item in enumerate(v):
+                            sub = branch.add(f'[dim][{i}][/dim]')
+                            add_tree(sub, item)
+                    else:
+                        vals = ', '.join(str(x) for x in v)
+                        node.add(f'[bold cyan]{k}[/bold cyan]: [white]{vals}[/white]')
+                else:
+                    val = str(v) if v is not None else '[dim]null[/dim]'
+                    node.add(f'[bold cyan]{k}[/bold cyan]: [white]{val}[/white]')
+
+        add_tree(tree, info)
+        console.print(tree)
+
+    @staticmethod
+    def _display_yaml(info):
+        """Formato YAML."""
+        try:
+            import yaml
+        except ImportError:
+            raise ImportError("Instala 'PyYAML': pip install pyyaml")
+
+        print(yaml.dump(info, allow_unicode=True, sort_keys=False, default_flow_style=False))
 
     @classmethod
     def load_dataframe(cls, name, encoding=None, separator=None, return_metadata=False):
