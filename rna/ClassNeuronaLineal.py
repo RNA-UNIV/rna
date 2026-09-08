@@ -1,6 +1,5 @@
 from rna.ClassNeuronaBase import NeuronaBase
 import numpy as np
-from rna.grafica import *
 
 class NeuronaLineal(NeuronaBase):
     """
