@@ -1,4 +1,5 @@
 from rna.ClassNeuronaBase import NeuronaBase
+from rna.grafica import *
 import numpy as np
 
 class NeuronaLineal(NeuronaBase):
