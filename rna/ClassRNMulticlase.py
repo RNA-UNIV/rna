@@ -136,18 +136,21 @@ class RNMulticlase(NeuronaBase):
 
     def _score_metric(self, y_true, y_pred):
         """
-        Calcula la métrica principal del modelo - implementar en subclase
+        Calcula la métrica principal del modelo.
+        Devuelve el error promedio equivalente al acumulado en self.errors_ durante fit.
 
         Parameters
-        ----------  
-        y_true : array-like
-            Valores reales
-        y_pred : array-like
+        ----------
+        y_true : array-like, shape = [n_examples, n_class]
+            Valores reales (one-hot)
+        y_pred : array-like, shape = [n_examples, n_class]
             Valores predichos
-        """
-        loss = self.fCosto(np.argmax(y_true), y_pred)
-        loss /= y_true.shape[0]
 
+        Returns
+        -------
+        tuple : (nombre_costo, error_promedio)
+        """
+        loss = self.fCosto(y_true, y_pred) / y_true.shape[0]
         return self.COSTO.lower(), loss
 
     def fCosto(self, y, y_hat):
