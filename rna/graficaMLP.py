@@ -3,42 +3,57 @@ import time
 from matplotlib import pylab as plt
 from IPython import display
 
+
 def dibuPtos_y_2Rectas(entradas, salida, W, b, ph=0, titulos=[]):
-    if (entradas.shape[1]==2):
-        if (len(salida.shape)==2):
+    if (entradas.shape[1] == 2):
+        if (len(salida.shape) == 2):
             salida = salida.T[0]
-        if (len(b.shape)==2):
+        if (len(b.shape) == 2):
             b = b.T[0]
-            
-       #--- DIBUJA LOS EJEMPLOS EN EL FONDO -----
-   
-        plt.axis([min(entradas[:,0])-0.05, max(entradas[:,0])+0.05,min(entradas[:,1])-0.05, max(entradas[:,1])+0.05])
+
+        # Primera ejecución: crear figura
+        if (ph == 0) or (not isinstance(ph, dict)):
+            plt.close('all')
+            plt.figure(figsize=(8, 6))
+            ph = {'display_id': 'rectas_plot', 'first': True}
+
+        # --- DIBUJA LOS EJEMPLOS EN EL FONDO -----
+
+        plt.axis([min(entradas[:, 0]) - 0.05, max(entradas[:, 0]) + 0.05, min(entradas[:, 1]) - 0.05,
+                  max(entradas[:, 1]) + 0.05])
         plt.setp(plt.gca(), autoscale_on=False)
-               
-        clases=np.unique(salida)
-        if len(clases)==2:
-            plt.plot(entradas[salida==min(clases),0], entradas[salida==min(clases),1], 'bo')
-            plt.plot(entradas[salida==max(clases),0], entradas[salida==max(clases),1], 'ro')
+
+        clases = np.unique(salida)
+        if len(clases) == 2:
+            plt.plot(entradas[salida == min(clases), 0], entradas[salida == min(clases), 1], 'bo')
+            plt.plot(entradas[salida == max(clases), 0], entradas[salida == max(clases), 1], 'ro')
         else:
-            plt.plot(entradas[:,0], entradas[:,1], 'ro')
-        if (len(titulos)==2):
+            plt.plot(entradas[:, 0], entradas[:, 1], 'ro')
+        if (len(titulos) == 2):
             plt.xlabel(titulos[0])
             plt.ylabel(titulos[1])
-        
-       #--- DIBUJA LAS 2 RECTAS ---
+
+        # --- DIBUJA LAS 2 RECTAS ---
         n = 2
-        if (ph!=0):
-            for r in range(n):
-                for p in ph[r]:  #borramos la recta r
-                    p.remove()
-        X = np.array([min(entradas[:,0]), max(entradas[:,0])])
-     
-        ph = []
+        if (ph != 0) and not ph.get('first', False):
+            for linea in ph.get('rectas', []):  # borramos las rectas anteriores
+                linea.remove()
+
+        X = np.array([min(entradas[:, 0]), max(entradas[:, 0])])
+
+        rectas = []
         for r in range(n):
-            Y = (-1)*(W[r,0]/W[r,1])*X - (b[r]/W[r,1])
-            ph.append(plt.plot(X,np.squeeze(np.asarray(Y))))
-            
-        display.clear_output(wait=True)
-        display.display(plt.gcf())
+            Y = (-1) * (W[r, 0] / W[r, 1]) * X - (b[r] / W[r, 1])
+            rectas.append(plt.plot(X, np.squeeze(np.asarray(Y)))[0])
+
+        ph['rectas'] = rectas
+
+        # Mostrar o actualizar
+        if ph.get('first', False):
+            display.display(plt.gcf(), display_id=ph['display_id'])
+            ph['first'] = False
+        else:
+            display.update_display(plt.gcf(), display_id=ph['display_id'])
+
         time.sleep(0.01)
-    return(ph)
+    return (ph)
