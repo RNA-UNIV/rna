@@ -14,7 +14,7 @@ def dibuPtos_y_2Rectas(entradas, salida, W, b, ph=0, titulos=[]):
         # Primera ejecución: crear figura
         if (ph == 0) or (not isinstance(ph, dict)):
             plt.close('all')
-            plt.figure(figsize=(8, 6))
+            plt.figure(figsize=(6, 4))
             ph = {'display_id': 'rectas_plot', 'first': True}
 
         # --- DIBUJA LOS EJEMPLOS EN EL FONDO -----
